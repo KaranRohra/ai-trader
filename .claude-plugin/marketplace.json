@@ -1,0 +1,13 @@
+{
+  "name": "karan-rohra",
+  "owner": { "name": "Karan Rohra" },
+  "metadata": { "description": "Claude Code plugins from the Karan Rohra YouTube channel" },
+  "plugins": [
+    {
+      "name": "ai-momentum-trader",
+      "source": "./plugins/ai-momentum-trader",
+      "description": "A Claude AI trading bot for Zerodha: NIFTY 500 momentum breakouts, 2% risk, 14% stop + 1:2 target as a Zerodha GTT, journal and self-improvement you approve. Starts in PAPER mode.",
+      "version": "1.0.0"
+    }
+  ]
+}

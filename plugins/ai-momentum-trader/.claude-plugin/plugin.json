@@ -1,0 +1,17 @@
+{
+  "name": "ai-momentum-trader",
+  "version": "1.0.0",
+  "description": "A Claude AI trading bot for Zerodha: NIFTY 500 momentum breakouts, 2% risk, 14% stop + 1:2 target as a Zerodha GTT, journal and self-improvement you approve. Starts in PAPER mode.",
+  "author": {
+    "name": "Karan Rohra"
+  },
+  "keywords": [
+    "trading",
+    "zerodha",
+    "kite",
+    "momentum",
+    "nse",
+    "nifty500"
+  ],
+  "license": "MIT"
+}
