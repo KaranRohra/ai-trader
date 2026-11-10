@@ -1,6 +1,6 @@
 ---
 name: trading-day
-description: Run the AI Momentum Trader for today - Kite login, pending self-improvement approvals, NIFTY 500 momentum scan, exits, new entries with broker-side two-leg GTT (stop + target), journal and learning. Use when the user says "trading day", "run the bot", "start trading", or runs /trading-day. Run once per trading day, ideally 9:20-10:30 AM IST.
+description: Run the AI Trader for today - Kite login, pending self-improvement approvals, NIFTY 500 momentum scan, exits, new entries with broker-side two-leg GTT (stop + target), journal and learning. Use when the user says "trading day", "run the bot", "start trading", or runs /trading-day. Run once per trading day, ideally 9:20-10:30 AM IST.
 ---
 
 # Trading Day
@@ -11,13 +11,13 @@ You are the trading bot. Run this whole checklist on your own, in order, with no
 - `SCAN` = `<this skill's base directory>/../momentum-scan/scripts/scan.py`
 - `JOURNAL` = `<this skill's base directory>/../trade-journal/scripts/journal.py`
 - `LAB` = `<this skill's base directory>/../strategy-lab/scripts/lab.py`
-- Bot home = `~/ai-momentum-trader/` (config, positions, journal, learning).
+- Bot home = `~/ai-trader/` (config, positions, journal, learning).
 Run scripts with `python3` (on Windows: `python` or `py`). Every script prints JSON.
 
-**Read first:** the `risk-manager` and `order-executor` skills (rules + exact order procedures). Read `~/ai-momentum-trader/learning/lessons.md` if it exists.
+**Read first:** the `risk-manager` and `order-executor` skills (rules + exact order procedures). Read `~/ai-trader/learning/lessons.md` if it exists.
 
 ## 1. Setup and clock
-1. If `~/ai-momentum-trader/config.json` does not exist, run the `trading-setup` skill first and stop after it.
+1. If `~/ai-trader/config.json` does not exist, run the `trading-setup` skill first and stop after it.
 2. `python3 JOURNAL status` and note `mode` (PAPER or LIVE).
 3. Check the time in IST (`TZ=Asia/Kolkata date`):
    - Weekend or NSE holiday: skip to step 9 (journal + learning only). On Saturday, offer the `weekly-review`.
@@ -44,7 +44,7 @@ Then run `python3 LAB resolve --id N --action apply|reject|later --reason "<user
    - `regime.new_entries_allowed`: false means NIFTY 500 is below its 200-DMA, so **no new entries today**. Open positions keep their GTT stop and target.
    - `signals` (priority order; each with `limit_price`, `stop_level`, `stop_pct`, `target_est`, `qty_est`). A `qty_est` of 0 means even 1 share exceeds the risk budget: log it as `skipped_cash`.
    - `positions` (each with `exit`, `stop_hit_price`, `target_hit_price`).
-3. If a parameter trial is active (`python3 LAB pending` shows `in_trial`), also run `python3 SCAN scan --config ~/ai-momentum-trader/learning/trial/config.json --no-update --no-shadow --positions /nonexistent` and then `python3 LAB trial-log --scan-json <saved_to path>`. Never trade the trial signals.
+3. If a parameter trial is active (`python3 LAB pending` shows `in_trial`), also run `python3 SCAN scan --config ~/ai-trader/learning/trial/config.json --no-update --no-shadow --positions /nonexistent` and then `python3 LAB trial-log --scan-json <saved_to path>`. Never trade the trial signals.
 
 ## 5. Reconcile (LIVE only)
 Follow `order-executor` → "Reconcile". Every bot position in `positions.json` must still be held with an ACTIVE GTT. If a GTT triggered, journal the close at the actual fill price (reason `stop`). If a GTT is missing, place it now. Never touch holdings that are not in `positions.json`.

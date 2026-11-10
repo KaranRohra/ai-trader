@@ -1,13 +1,13 @@
 ---
 name: order-executor
-description: Exact Kite (Zerodha) MCP procedures for the AI Momentum Trader - LIMIT CNC entries tagged CLAUDEBOT, two-leg GTT (stop + target) placement, exits, reconciliation, PAPER-mode simulation and error handling. Use whenever the bot places, changes or checks an order.
+description: Exact Kite (Zerodha) MCP procedures for the AI Trader - LIMIT CNC entries tagged CLAUDEBOT, two-leg GTT (stop + target) placement, exits, reconciliation, PAPER-mode simulation and error handling. Use whenever the bot places, changes or checks an order.
 ---
 
 # Order Executor
 
 Kite MCP tools used: `get_quotes`, `get_ltp`, `get_margins`, `get_holdings`, `get_orders`, `get_order_history`, `place_order`, `cancel_order`, `get_gtts`, `place_gtt_order`, `modify_gtt_order`, `delete_gtt_order`.
 
-**Mode.** Read `mode` from `~/ai-momentum-trader/config.json`. In **PAPER** mode, never call `place_order`, `place_gtt_order`, `modify_gtt_order`, `delete_gtt_order` or `cancel_order`; use quotes only. In **LIVE** mode follow the steps exactly.
+**Mode.** Read `mode` from `~/ai-trader/config.json`. In **PAPER** mode, never call `place_order`, `place_gtt_order`, `modify_gtt_order`, `delete_gtt_order` or `cancel_order`; use quotes only. In **LIVE** mode follow the steps exactly.
 
 **Prices.** Prices must be on NSE's tick grid. The scan already rounds `limit_price` and stops. For a price you compute yourself, round **down** to a multiple of 0.05 (under ₹1,000), 0.10 (₹1,000–5,000), 0.50 (₹5,000–10,000) or 1.00 (above that). If Kite rejects a tick size, round to the next coarser step and retry once.
 

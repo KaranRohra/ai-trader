@@ -1,11 +1,11 @@
 ---
 name: risk-manager
-description: Hard risk rules and position-sizing math for the AI Momentum Trader - 2% risk per trade, 14% stops with 1:2 targets, max 10 positions, weekly loss limit, halt level, CNC only, bot-only positions. Read before placing any order; use when the user asks about risk, sizing or limits.
+description: Hard risk rules and position-sizing math for the AI Trader - 2% risk per trade, 14% stops with 1:2 targets, max 10 positions, weekly loss limit, halt level, CNC only, bot-only positions. Read before placing any order; use when the user asks about risk, sizing or limits.
 ---
 
 # Risk Manager
 
-These rules are **locked**. They can't be changed by the strategy-lab or by Claude during a run. Only the user can change them, by editing `~/ai-momentum-trader/config.json` themselves.
+These rules are **locked**. They can't be changed by the strategy-lab or by Claude during a run. Only the user can change them, by editing `~/ai-trader/config.json` themselves.
 
 ## Hard rules
 1. **Only NSE cash equity, delivery (CNC).** Never MIS, MTF, NRML, F&O, BSE, AMO or short selling.

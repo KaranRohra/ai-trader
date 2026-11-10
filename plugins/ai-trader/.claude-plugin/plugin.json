@@ -1,0 +1,19 @@
+{
+  "name": "ai-trader",
+  "version": "1.0.0",
+  "description": "An AI trading system for Claude Code: scanning, risk management, orders with broker-side stop-losses, journal, weekly review and self-improvement you approve. Strategy #1: NIFTY 500 Momentum Breakout on Zerodha (Kite MCP). Starts in PAPER mode.",
+  "author": {
+    "name": "Karan Rohra"
+  },
+  "keywords": [
+    "trading",
+    "ai-trading",
+    "trading-bot",
+    "zerodha",
+    "kite",
+    "nse",
+    "momentum",
+    "nifty500"
+  ],
+  "license": "MIT"
+}

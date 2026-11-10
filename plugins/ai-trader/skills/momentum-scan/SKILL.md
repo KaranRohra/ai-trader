@@ -8,7 +8,7 @@ description: The Momentum Breakout strategy rules for the NIFTY 500 and the scan
 The script `scripts/scan.py` applies these rules exactly. Claude never computes indicators by hand and never changes a rule while trading. Rule changes go only through `strategy-lab` with the user's approval.
 
 ## Data
-- Official NSE end-of-day files from the NSE archives: daily price file (bhavcopy), index closes, and the NIFTY 500 list. Free, no login, cached in `~/ai-momentum-trader/data/`.
+- Official NSE end-of-day files from the NSE archives: daily price file (bhavcopy), index closes, and the NIFTY 500 list. Free, no login, cached in `~/ai-trader/data/`.
 - Splits, bonuses and demergers are detected from the overnight price jump (a >20% gap that lands on a standard ratio). Older prices are then adjusted, so there are no fake breakouts.
 - Signals use **yesterday's official close**. Orders go in the next morning.
 
@@ -53,4 +53,4 @@ The script `scripts/scan.py` applies these rules exactly. Claude never computes 
   - It reports the full period, in-sample (before 2021) and out-of-sample (2021 onward).
 
 ## Explaining a stock
-If the user asks why a stock was or wasn't picked, run a scan with `--no-shadow` and look for the stock in the output. Only stocks that pass every rule are listed. For a stock that isn't listed, check the shadow book (`~/ai-momentum-trader/learning/shadow_book.csv`): its `failed` column names the rules it missed.
+If the user asks why a stock was or wasn't picked, run a scan with `--no-shadow` and look for the stock in the output. Only stocks that pass every rule are listed. For a stock that isn't listed, check the shadow book (`~/ai-trader/learning/shadow_book.csv`): its `failed` column names the rules it missed.

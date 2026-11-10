@@ -1,6 +1,6 @@
 ---
 name: trading-setup
-description: One-time setup for the AI Momentum Trader - checks Python, creates ~/ai-momentum-trader (capital, PAPER/LIVE mode), downloads NSE data, optionally backtests the strategy, and explains daily use. Use on first install, or when the user asks to set up, reset, switch PAPER/LIVE or change capital.
+description: One-time setup for the AI Trader - checks Python, creates ~/ai-trader (capital, PAPER/LIVE mode), downloads NSE data, optionally backtests the strategy, and explains daily use. Use on first install, or when the user asks to set up, reset, switch PAPER/LIVE or change capital.
 ---
 
 # Trading Setup
@@ -24,5 +24,5 @@ Scripts: `JOURNAL` = `<this skill's base directory>/../trade-journal/scripts/jou
 ## Switching to LIVE later
 Only when the user explicitly asks:
 1. Confirm in a question that real orders will be placed. Show their capital and risk per trade.
-2. Edit `~/ai-momentum-trader/config.json` and set `"mode": "LIVE"`.
+2. Edit `~/ai-trader/config.json` and set `"mode": "LIVE"`.
 3. Paper positions are not carried into LIVE. Close them in the journal first (`JOURNAL close` at the current LTP, reason `paper_to_live`).

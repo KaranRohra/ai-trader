@@ -2,7 +2,7 @@
 """Momentum Breakout scanner for the NIFTY 500 (Python standard library only).
 
 Data: free, official NSE archive files (daily bhavcopy + index closes + NIFTY 500 list).
-No broker login, no API key. Everything is cached in ~/ai-momentum-trader/data.
+No broker login, no API key. Everything is cached in ~/ai-trader/data.
 
 Commands
   update                 download any missing days (first run: ~15 months, then 1 file/day)
@@ -32,7 +32,7 @@ from bisect import bisect_left
 from collections import deque
 from pathlib import Path
 
-HOME = Path(os.environ.get("CMT_HOME", Path.home() / "ai-momentum-trader"))
+HOME = Path(os.environ.get("AI_TRADER_HOME", Path.home() / "ai-trader"))
 DATA = HOME / "data"
 EQ_DIR = DATA / "eq"
 INDEX_FILE = DATA / "index_nifty500.json"
@@ -40,7 +40,7 @@ HOLIDAYS_FILE = DATA / "no_data_days.json"
 N500_FILE = DATA / "nifty500_list.csv"
 SHADOW = HOME / "learning" / "shadow_book.csv"
 
-UA = "Mozilla/5.0 (compatible; ai-momentum-trader/1.0; daily NSE archive download)"
+UA = "Mozilla/5.0 (compatible; ai-trader/1.0; daily NSE archive download)"
 UDIFF_START = dt.date(2024, 7, 8)  # NSE switched the bhavcopy format on this date
 KEEP_SERIES = {"EQ", "BE", "BZ"}
 INDEX_NAMES = {"nifty 500", "cnx 500"}
@@ -877,8 +877,8 @@ def main():
     u.add_argument("--to", dest="end", help="YYYY-MM-DD (default: today)")
     s = sub.add_parser("scan", help="signals + position updates as JSON")
     s.add_argument("--equity", type=float, help="current account equity in ₹ (for position sizing)")
-    s.add_argument("--positions", help="positions.json path (default: ~/ai-momentum-trader/positions.json)")
-    s.add_argument("--config", help="config.json path (default: ~/ai-momentum-trader/config.json)")
+    s.add_argument("--positions", help="positions.json path (default: ~/ai-trader/positions.json)")
+    s.add_argument("--config", help="config.json path (default: ~/ai-trader/config.json)")
     s.add_argument("--date", help="scan as of this past date (YYYY-MM-DD) instead of the latest")
     s.add_argument("--no-update", action="store_true", help="skip downloading new days")
     s.add_argument("--no-shadow", action="store_true", help="don't write to the shadow book")

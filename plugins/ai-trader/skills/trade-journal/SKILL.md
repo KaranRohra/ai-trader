@@ -1,11 +1,11 @@
 ---
 name: trade-journal
-description: The AI Momentum Trader's books - bot-only positions, every decision (taken, vetoed, skipped) with its reason, closed trades with P&L and R-multiples, and daily equity. Use to log anything the bot does, or when the user asks about positions, P&L, history or why a trade was skipped.
+description: The AI Trader's books - bot-only positions, every decision (taken, vetoed, skipped) with its reason, closed trades with P&L and R-multiples, and daily equity. Use to log anything the bot does, or when the user asks about positions, P&L, history or why a trade was skipped.
 ---
 
 # Trade Journal
 
-The bot keeps its **own** books in `~/ai-momentum-trader/`, separate from the rest of the Zerodha account. All writes go through `scripts/journal.py`; never edit the CSV/JSON files by hand.
+The bot keeps its **own** books in `~/ai-trader/`, separate from the rest of the Zerodha account. All writes go through `scripts/journal.py`; never edit the CSV/JSON files by hand.
 
 | Command | When |
 |---|---|

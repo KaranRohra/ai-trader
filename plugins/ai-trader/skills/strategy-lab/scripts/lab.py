@@ -23,7 +23,7 @@ import os
 import sys
 from pathlib import Path
 
-HOME = Path(os.environ.get("CMT_HOME", Path.home() / "ai-momentum-trader"))
+HOME = Path(os.environ.get("AI_TRADER_HOME", Path.home() / "ai-trader"))
 L = HOME / "learning"
 PENDING = L / "pending.json"
 LESSONS = L / "lessons.md"

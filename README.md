@@ -1,6 +1,8 @@
-# AI Momentum Trader: a Claude Code trading bot for Zerodha
+# AI Trader: an AI trading system for Claude Code
 
-A set of Claude Code **skills** that run a rules-based momentum strategy on the NIFTY 500 through your Zerodha account. Once a day you type one command and click the Kite login link. The bot then scans, manages exits and stops, places new trades, keeps a journal, and learns from its results. Every change it wants to make waits for your approval.
+A Claude Code plugin that runs a trading system end to end through your broker: scanning, risk management, order placement with broker-side stop-losses, a journal, weekly reviews and a self-improvement loop. Once a day you type one command and click your broker's login link. Every change the system wants to make to itself waits for your approval.
+
+**Today:** one strategy (Momentum Breakout on the NIFTY 500) and one broker (Zerodha, through its official Kite MCP). More strategies and brokers are planned.
 
 > **Disclaimer.** This is an experiment shared for education. It is **not investment advice**, and I am not a SEBI-registered adviser. Trading involves risk, including the loss of your capital. Past or backtested results don't guarantee future results. You are responsible for every order placed in your account.
 
@@ -15,7 +17,7 @@ A set of Claude Code **skills** that run a rules-based momentum strategy on the 
 | Journal | Every decision with its reason, P&L, R-multiples, daily equity |
 | Learning | Records every near-miss and its outcome. Suggests lessons and tweaks, which apply only if you approve |
 
-**Strategy (v1.0):**
+**Strategy #1: Momentum Breakout (v1.0)**
 - Regime: NIFTY 500 above its 200-DMA.
 - Trend: close > 50-DMA > 200-DMA.
 - Momentum score (6- and 12-month return ÷ volatility) in the top 50.
@@ -30,23 +32,23 @@ A set of Claude Code **skills** that run a rules-based momentum strategy on the 
 - Win rate 54%. Losing years: 2018 −18.2%, 2022 −10.5%, 2025 −9.7%. The worst month was −13.9% (March 2026).
 - A backtest is not a forecast.
 
-Full rules: [`momentum-scan/SKILL.md`](plugins/ai-momentum-trader/skills/momentum-scan/SKILL.md).
+Full rules: [`momentum-scan/SKILL.md`](plugins/ai-trader/skills/momentum-scan/SKILL.md).
 
 ## Install
 You need [Claude Code](https://claude.com/claude-code), Python 3.8+ (no extra packages) and a Zerodha account.
 ```
-/plugin marketplace add KaranRohra/ai-momentum-trader
-/plugin install ai-momentum-trader@karan-rohra
+/plugin marketplace add KaranRohra/ai-trader
+/plugin install ai-trader@karan-rohra
 ```
 Then run the setup once. It asks for your capital and starts in **PAPER mode** (real data, simulated orders):
 ```
-/ai-momentum-trader:trading-setup
+/ai-trader:trading-setup
 ```
 
 ## Daily use
 Every trading day around **9:20–10:30 AM IST**:
 ```
-/ai-momentum-trader:trading-day
+/ai-trader:trading-day
 ```
 Click the Kite login link when it appears. Zerodha requires a fresh login every day. Everything else runs on its own. Stops sit at Zerodha as GTT orders, so your computer doesn't need to stay on after the run.
 
@@ -56,11 +58,11 @@ Other skills: `weekly-review` (weekend report) and `strategy-lab` (runs monthly 
 - **Use a separate Zerodha account**, or keep only the money you're giving the bot in it. The bot only touches its own positions, but the Kite connection can see the whole account.
 - It starts in PAPER mode. LIVE is a deliberate switch in `trading-setup`.
 - Risk rules are locked. The self-improvement loop can't change them.
-- Your data stays on your computer in `~/ai-momentum-trader/`. Market data comes from NSE's public archives. Orders go through Zerodha's official hosted Kite MCP (`mcp.kite.trade`), under [Zerodha's privacy policy](https://zerodha.com/privacy-policy/).
+- Your data stays on your computer in `~/ai-trader/`. Market data comes from NSE's public archives. Orders go through Zerodha's official hosted Kite MCP (`mcp.kite.trade`), under [Zerodha's privacy policy](https://zerodha.com/privacy-policy/).
 
 ## Files on your computer
 ```
-~/ai-momentum-trader/
+~/ai-trader/
   config.json          capital, mode, strategy version
   positions.json       the bot's open positions
   journal/             trades.csv, decisions.csv, daily.csv

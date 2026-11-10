@@ -2,7 +2,7 @@
 """Bot bookkeeping (Python standard library only). The bot keeps its OWN books, separate from
 the rest of the Zerodha account, so equity/P&L only ever include trades the bot made.
 
-Files in ~/ai-momentum-trader/
+Files in ~/ai-trader/
   config.json            mode, capital, limits, strategy version
   positions.json         open bot positions (symbol, qty, entry, stop, GTT id, ...)
   journal/trades.csv     every closed trade
@@ -27,7 +27,7 @@ import os
 import sys
 from pathlib import Path
 
-HOME = Path(os.environ.get("CMT_HOME", Path.home() / "ai-momentum-trader"))
+HOME = Path(os.environ.get("AI_TRADER_HOME", Path.home() / "ai-trader"))
 CONFIG = HOME / "config.json"
 POSITIONS = HOME / "positions.json"
 J = HOME / "journal"

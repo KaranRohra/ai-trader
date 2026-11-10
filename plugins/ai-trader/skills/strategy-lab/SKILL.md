@@ -1,6 +1,6 @@
 ---
 name: strategy-lab
-description: Monthly self-improvement for the AI Momentum Trader - studies the shadow book (every near-miss and signal with its later outcome), the journal and veto results, tests one idea against the full-history backtest, and queues at most one change for the user's approval. Nothing changes without the user picking Apply. Use on the first trading day of each month or when the user asks the bot to learn or improve.
+description: Monthly self-improvement for the AI Trader - studies the shadow book (every near-miss and signal with its later outcome), the journal and veto results, tests one idea against the full-history backtest, and queues at most one change for the user's approval. Nothing changes without the user picking Apply. Use on the first trading day of each month or when the user asks the bot to learn or improve.
 ---
 
 # Strategy Lab (self-improvement)
@@ -21,13 +21,13 @@ The bot makes only ~20 real trades a year. Tuning on so few is curve-fitting. So
    `LAB propose --type lesson --title "..." --lesson "<rule the analyst will apply>" --evidence "<numbers>" --cases N`.
    If `veto-report` says vetoes are not helping, or an active lesson's cases now do as well as the taken trades, queue `--type retire_lesson --change '{"lesson_id": "L<n>"}'`.
 3. **One parameter idea at most.** Only if a bucket in `features` shows a clear, sizeable difference with n ≥ 30 (e.g. RSI 75–80 entries doing much worse than 60–75):
-   a. Write the candidate config: copy `~/ai-momentum-trader/config.json` to `~/ai-momentum-trader/learning/candidate.json` and change only that parameter, inside its bounds.
+   a. Write the candidate config: copy `~/ai-trader/config.json` to `~/ai-trader/learning/candidate.json` and change only that parameter, inside its bounds.
    b. Backtest both on the same period: `python3 SCAN backtest --from 2016-01-01 --config <file> --out <folder>`, for the current config and for the candidate.
    c. Robustness: also backtest one step either side of the candidate value (e.g. rsi_max 74 and 76 around 75).
    d. **Gate.** Propose only if the candidate beats the current config on `cagr_to_maxdd` in **both** in-sample and out-of-sample, its max drawdown is no worse by more than 2 points, and both neighbours also beat the current config. Otherwise record "tested, not proposed" in the lab note and stop.
    e. `LAB propose --type parameter --title "..." --change '{"rsi_max": 75}' --evidence "<IS/OOS cagr_to_maxdd before→after, maxDD, trades, neighbours>"`.
 4. **Execution tweaks** (`--type execution`: `limit_buffer_pct`, `max_gap_pct`). Only with ≥ 20 entries' worth of evidence from the journal, such as many `unfilled` or `skipped_gap` decisions followed by strong moves.
-5. Write a short lab note to `~/ai-momentum-trader/learning/lab_<YYYY-MM>.md`: what was examined, what was found, what was queued and what was tested but not proposed. Tell the user what's waiting. They'll be asked at the next `/trading-day`.
+5. Write a short lab note to `~/ai-trader/learning/lab_<YYYY-MM>.md`: what was examined, what was found, what was queued and what was tested but not proposed. Tell the user what's waiting. They'll be asked at the next `/trading-day`.
 
 ## After approval (handled by lab.py)
 - **Lesson:** added to `lessons.md`, which the analyst reads every run.
