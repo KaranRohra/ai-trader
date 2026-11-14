@@ -1,29 +1,44 @@
 ---
 name: risk-manager
-description: Hard risk rules and position-sizing math for the AI Trader - 2% risk per trade, 14% stops with 1:2 targets, max 10 positions, weekly loss limit, halt level, CNC only, bot-only positions. Read before placing any order; use when the user asks about risk, sizing or limits.
+description: Risk rules and position-sizing math for the AI Trader - each strategy's own risk settings chosen by the user (sizing, max positions, weekly loss limit, drawdown halt, market filter, broker-side stop, stops only up) plus the one rule for every strategy (bot-only positions). Read before placing any order; use when the user asks about risk, sizing or limits.
 ---
 
 # Risk Manager
 
-These rules are **locked**. They can't be changed by the strategy-lab or by Claude during a run. Only the user can change them, by editing `~/ai-trader/config.json` themselves.
+## Where the rules come from
+Every strategy has its own **risk block**, answered by the user in the `strategies` skill's setup flow (risk questions → review screen → Start). It's stored in `~/ai-trader/strategies/<id>.json` → `risk`, with the date it was `confirmed`. The bot never invents, assumes or relaxes a risk rule:
+- A strategy whose risk isn't confirmed is **not traded** (`journal.py status` → `block_reasons: risk_not_confirmed`; the scan says `risk_confirmed: false`).
+- Claude and the strategy-lab can't change a risk answer during a run. The lab may *suggest* a change; it applies only when the user picks Apply.
+- `null` means the user chose "no limit" for that rule. Respect that; don't add your own.
 
-## Hard rules
-1. **Only NSE cash equity, delivery (CNC).** Never MIS, MTF, NRML, F&O, BSE, AMO or short selling.
-2. **Only the bot's own positions.** The bot's positions are the ones in `positions.json`, and its orders are tagged `CLAUDEBOT`. Never sell, modify or delete a GTT for any other holding, even if it has the same symbol: if the user already owns a stock outside the bot, the bot does not buy it (log `vetoed: already_held_outside_bot`).
-3. **Every position has a broker-side GTT stop.** If the GTT can't be placed after 2 attempts, sell the position immediately.
-4. **Stops only move up.** `journal.py stop` refuses a lower stop.
-5. **At most 10 open positions.** There is no limit on entries per day. Cash usually caps it at ~7, since each position is ~14.3% of equity.
-6. **Weekly loss limit.** If the week's P&L is −8% or worse, there are no new entries until next Monday. `journal.py status` reports this as `new_entries_blocked`.
-7. **Halt.** If bot equity is 30% or more below its highest level so far (`drawdown_pct` in `journal.py status`; the peak starts at the starting capital), there are no new entries. That is 1.5× the backtest's worst drawdown (−20.4%), so it means the strategy is no longer behaving as tested. Tell the user clearly at the top of the summary. Exits and stops keep running.
-8. **Regime.** If NIFTY 500 is below its 200-DMA, there are no new entries.
-9. **When in doubt, don't trade.** For an unknown error, odd data or an unexpected holding, skip the trade, log why, and tell the user.
+`python3 <base>/../strategies/scripts/strategy.py show --id <active>` → `your_risk_rules` shows the current answers.
 
-## Sizing (2% risk, 14% stop)
-- `risk_amount = equity × risk_pct / 100`. With ₹1,00,000 equity that's ₹2,000. Equity comes from `journal.py status`: bot capital + realized P&L + open positions at market.
-- `stop_distance` = 14% of the signal close (from the scan). After the fill, stop = fill − `stop_distance`.
-- `qty = floor(risk_amount ÷ stop_distance)`.
-- Cap: `qty × limit_price` may be at most `max_position_pct` (100%) of equity, and at most the free cash. In LIVE that's Kite `get_margins` → equity → available cash. In PAPER it's `journal.py status` → `cash`.
-- If qty < 1, skip with `skipped_cash`.
-- The scan's `qty_est` already applies this with the equity you passed. Recompute only if the cash check changes it.
+## The one rule for every strategy
+**Bot-only positions.** The bot's positions are the ones in `positions.json`, and its orders are tagged `CLAUDEBOT`. Never sell, modify or delete a GTT for any other holding, even if it has the same symbol. If the user already owns a stock outside the bot, the bot does not buy it (log `vetoed: already_held_outside_bot`).
 
-**Worked example.** Equity ₹1,00,000, risk ₹2,000. Signal close ₹990, limit ₹1,000, stop distance 14% × 990 = ₹138.6 → qty = floor(2,000 ÷ 138.6) = 14 (₹14,000). If it fills at ₹995: stop = 995 − 138.6 = ₹856.40 and target = 995 + 2 × 138.6 = ₹1,272.20, tick-rounded.
+## What the engine supports today
+NSE cash equity, delivery (CNC), long only, LIMIT entries, GTT stop/target orders and MARKET exits. That's a limit of the current engine, not a risk rule: never place MIS, MTF, NRML, F&O, BSE, AMO or short orders.
+
+## The strategy's risk rules (as the user answered them)
+| Setting | What the bot does |
+|---|---|
+| `sizing` | `risk`: qty = floor(equity × pct ÷ stop distance). `fixed_pct`: qty = floor(equity × pct ÷ limit price) |
+| `max_positions` | no new entry when this many bot positions are open (null = no limit; cash still limits it) |
+| `max_position_pct` | qty × limit price at most this % of equity (null = no cap) |
+| `weekly_loss_limit_pct` | week P&L at or below −this % → no new entries until next Monday (`new_entries_blocked`, reason `weekly_loss_limit`) |
+| `halt_drawdown_pct` | equity this % or more below its highest level → no new entries (reason `drawdown_halt`). Tell the user clearly at the top of the summary. Exits and stops keep running |
+| `regime` | the market filter fails → no new entries (scan → `regime.new_entries_allowed: false`) |
+| `broker_stop_required` | true: every position gets a GTT stop at the broker right after the fill; if it can't be placed after 2 attempts, sell the position. false: the strategy may have no stop; exits come from its rules |
+| `stops_only_up` | true: `journal.py stop` refuses a lower stop. false: a trailing stop may also move down |
+
+All counts and P&L use the bot's whole book (every strategy's positions), since it's one account.
+
+**When in doubt, don't trade.** For an unknown error, odd data or an unexpected holding, skip the trade, log why, and tell the user.
+
+## Sizing details
+- Equity comes from `journal.py status`: bot capital + realized P&L + open positions at market.
+- Stop distance: `stop_distance` from the scan (pct and ATR stops, measured from the fill), or limit price − `stop_level` (chart-level stops).
+- Cap: also at most the free cash. In LIVE that's Kite `get_margins` → equity → available cash; in PAPER it's `journal.py status` → `cash`.
+- If qty < 1, skip with `skipped_cash`. The scan's `qty_est` already applies the sizing with the equity you passed; recompute only if the cash check changes it.
+
+**Worked example (risk sizing, 2% of equity, 14% stop).** Equity ₹1,00,000, risk ₹2,000. Signal close ₹990, limit ₹1,000, stop distance 14% × 990 = ₹138.6 → qty = floor(2,000 ÷ 138.6) = 14 (₹14,000). If it fills at ₹995: stop = 995 − 138.6 = ₹856.40 and a 1:2 target = 995 + 2 × 138.6 = ₹1,272.20, tick-rounded.

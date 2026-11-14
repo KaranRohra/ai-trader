@@ -10,8 +10,8 @@
     {
       "name": "ai-trader",
       "source": "./plugins/ai-trader",
-      "description": "An AI trading system for Claude Code: scanning, risk management, orders with broker-side stop-losses, journal, weekly review and self-improvement you approve. Strategy #1: NIFTY 500 Momentum Breakout on Zerodha (Kite MCP). Starts in PAPER mode.",
-      "version": "1.0.0"
+      "description": "An AI trading system for Claude Code: describe any technical strategy in plain words (or pick a ready-made one), set the risk rules you choose, and let it trade with broker-side stop-losses, a journal, weekly review and self-improvement you approve. Zerodha (Kite MCP). Starts in PAPER mode.",
+      "version": "2.0.0"
     }
   ]
 }

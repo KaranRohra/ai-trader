@@ -1,0 +1,69 @@
+{
+ "id": "ema-crossover",
+ "name": "EMA 20/50 Crossover",
+ "version": "v1.0",
+ "about": "A classic moving-average crossover trend system: buy when the 20-day EMA crosses above the 50-day EMA while the stock is above its 200-day average; sell the morning after the 20-day EMA closes back below the 50-day EMA. Initial stop 3 x ATR(14) below entry.",
+ "source": "Moving-average crossover trend following, a standard textbook technique. This version's choices: 20/50 EMAs, a 200-day trend filter, a 3 x ATR protective stop, and the strongest 6-month performers first when slots are short.",
+ "style": "trend following, swing to positional (weeks to months)",
+ "universe": {
+  "index": "nifty500",
+  "min_price": 50,
+  "min_turnover_cr": 10
+ },
+ "history_sessions": 210,
+ "params": {
+  "fast": 20,
+  "slow": 50,
+  "trend": 200,
+  "atr_mult": 3
+ },
+ "tunable": {
+  "fast": [
+   10,
+   30
+  ],
+  "slow": [
+   40,
+   100
+  ],
+  "atr_mult": [
+   2,
+   4
+  ]
+ },
+ "buy_rules": [
+  "the {fast}-day EMA crosses above the {slow}-day EMA today",
+  "price above its {trend}-day average"
+ ],
+ "rank_say": "best 6-month return first",
+ "sell_rules": [
+  "sell the morning after the {fast}-day EMA closes below the {slow}-day EMA"
+ ],
+ "stop": {
+  "type": "atr",
+  "mult": "atr_mult",
+  "period": 14
+ },
+ "target": null,
+ "trail": null,
+ "max_hold_days": null,
+ "execution": {
+  "limit_buffer_pct": 1,
+  "max_gap_pct": 3
+ },
+ "risk": null,
+ "risk_suggested": {
+  "sizing": {
+   "type": "risk",
+   "pct": 1
+  },
+  "max_positions": 10,
+  "max_position_pct": 20,
+  "weekly_loss_limit_pct": 8,
+  "halt_drawdown_pct": 45,
+  "regime": null,
+  "broker_stop_required": true,
+  "stops_only_up": true,
+  "basis": "A small risk per trade with up to 10 positions and at most 20% in one stock spreads the risk across many trend trades: most crossover trades end as small losses and a few become large winners. No market filter is suggested because the strategy already requires each stock to be above its own 200-day average. The weekly loss limit and the drawdown halt are set to act only in unusually bad periods for this strategy."
+ }
+}

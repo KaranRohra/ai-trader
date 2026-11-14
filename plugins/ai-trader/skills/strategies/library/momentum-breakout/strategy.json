@@ -1,0 +1,94 @@
+{
+ "id": "momentum-breakout",
+ "name": "Momentum Breakout",
+ "version": "v1.0",
+ "about": "Buys the NIFTY 500 stocks with the strongest 6- and 12-month momentum on the day they close at a new 52-week high on heavy volume. Exits only at a fixed 14% stop-loss or a 1:2 target (+28%), held at the broker as one two-leg GTT.",
+ "source": "Strategy #1 of the AI Trader series (Part 1). Parameters picked from a 2016-2026 parameter study: the middle of a stable area (13-16% stop with a 1:2 target).",
+ "style": "trend following, swing to positional (weeks to months)",
+ "universe": {
+  "index": "nifty500",
+  "min_price": 50,
+  "min_turnover_cr": 10
+ },
+ "history_sessions": 260,
+ "params": {
+  "rank_entry": 50,
+  "vol_mult": 1.5,
+  "rsi_min": 60,
+  "rsi_max": 80,
+  "max_ext_pct": 10,
+  "stop_pct": 14,
+  "target_r": 2
+ },
+ "tunable": {
+  "rank_entry": [
+   20,
+   100
+  ],
+  "vol_mult": [
+   1.0,
+   3.0
+  ],
+  "rsi_min": [
+   50,
+   70
+  ],
+  "rsi_max": [
+   70,
+   90
+  ],
+  "max_ext_pct": [
+   5,
+   20
+  ],
+  "stop_pct": [
+   8,
+   15
+  ],
+  "target_r": [
+   2,
+   4
+  ]
+ },
+ "buy_rules": [
+  "uptrend: price above the 50-day average, which is above the 200-day average",
+  "closes at a new 52-week high (above the highest high of the previous 252 sessions)",
+  "volume at least {vol_mult}x its 50-day average",
+  "RSI(14) between {rsi_min} and {rsi_max}",
+  "no more than {max_ext_pct}% above the 20-day EMA"
+ ],
+ "max_rank": "rank_entry",
+ "rank_say": "strongest momentum score first",
+ "sell_rules": [],
+ "stop": {
+  "type": "pct",
+  "value": "stop_pct",
+  "min_pct": 3,
+  "max_pct": 15
+ },
+ "target": {
+  "type": "r",
+  "value": "target_r"
+ },
+ "trail": null,
+ "max_hold_days": null,
+ "execution": {
+  "limit_buffer_pct": 1,
+  "max_gap_pct": 3
+ },
+ "risk": null,
+ "risk_suggested": {
+  "sizing": {
+   "type": "risk",
+   "pct": 2
+  },
+  "max_positions": 10,
+  "max_position_pct": 100,
+  "weekly_loss_limit_pct": 8,
+  "halt_drawdown_pct": 35,
+  "regime": "nifty500 > nifty500_sma(200)",
+  "broker_stop_required": true,
+  "stops_only_up": true,
+  "basis": "These are the settings the AI Trader's original live bot uses. Risk per trade and the number of positions are sized so that most of the capital is usually invested; smaller sizes leave much of it idle. The market filter keeps the strategy from buying while the NIFTY 500 is in a downtrend. The weekly loss limit and the drawdown halt are set to act only in unusually bad periods for this strategy."
+ }
+}

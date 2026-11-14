@@ -11,8 +11,8 @@ The bot keeps its **own** books in `~/ai-trader/`, separate from the rest of the
 |---|---|
 | `journal.py status [--prices JSON]` | start of every run: equity, cash, week P&L, open positions, `new_entries_blocked` |
 | `journal.py decision --symbol X --decision D --reason "..."` | every signal not taken: `vetoed`, `skipped_gap`, `skipped_slots`, `skipped_cash`, `unfilled`, `blocked_regime`, `blocked_limits` |
-| `journal.py open --symbol X --qty N --price P --stop S [--gtt-id] [--order-id] [--rank] [--score]` | after a fill (also logs `taken`) |
-| `journal.py stop --symbol X --stop S [--gtt-id] [--highest-close]` | after raising a stop (refuses to lower it) |
+| `journal.py open --symbol X --qty N --price P [--stop S] [--target T] [--strategy ID] [--gtt-id] [--order-id] [--rank] [--score]` | after a fill (also logs `taken`); the position remembers its strategy |
+| `journal.py stop --symbol X --stop S [--gtt-id] [--highest-close]` | after moving a stop (refuses to lower it if the strategy's risk says stops only move up) |
 | `journal.py close --symbol X --price P --reason R [--order-id] [--date]` | after an exit: computes P&L after estimated costs and the R-multiple |
 | `journal.py snapshot --prices JSON` | end of every run: daily equity |
 | `journal.py weekly [--week 2026-W45]` | weekly stats, also saved to `weekly/<week>.json` |
