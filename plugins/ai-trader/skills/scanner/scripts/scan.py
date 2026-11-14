@@ -505,6 +505,7 @@ def cmd_scan(args):
                 passed = False
                 fail.append(skip)
         if passed:
+            f["rules_passed"] = list(res.checks) or ["buy_rule"]
             f["limit_price"] = limit
             f["skip_if_open_above"] = tick_round(f["close"] * (1 + st.max_gap_pct / 100), up=True)
             f["stop_type"] = st.stop["type"] if st.stop else None
@@ -546,7 +547,12 @@ def cmd_scan(args):
         recent = []
         if trades_csv.exists():
             with trades_csv.open() as fh:
-                recent = list(csv.DictReader(fh))[-50:]
+                done = [t for t in csv.DictReader(fh) if t.get("status", "CLOSED") == "CLOSED"]
+            for t in done:  # the names the hooks know (journal v2.1 columns -> short names)
+                t.setdefault("pnl", t.get("net_pnl"))
+                t.setdefault("ret_pct", t.get("return_pct"))
+                t.setdefault("r", t.get("r_multiple"))
+            recent = done[-50:]
         book = {"date": asof, "equity": equity, "cash": None,
                 "positions": [pos_info(p) for p in positions], "recent_trades": recent}
         kept = []
@@ -627,6 +633,13 @@ def cmd_scan(args):
         elif p.get("target") and s.h[i] >= p["target"]:
             exits.insert(0, "target_touched")
             target_hit = round(max(s.o[i], p["target"]), 2)  # a gap above the target fills at the open
+        # best / worst price since the day after entry (for the journal's best and worst move)
+        after = [j for j in range(len(s.c)) if panel.dates[s.di[j]] > ed]
+        if after:
+            jb = max(after, key=lambda j: s.h[j])
+            jw = min(after, key=lambda j: s.l[j])
+            row.update({"best_high": round(s.h[jb], 2), "best_high_date": panel.dates[s.di[jb]].isoformat(),
+                        "worst_low": round(s.l[jw], 2), "worst_low_date": panel.dates[s.di[jw]].isoformat()})
         rk = res.rank[i] if res.rank is not None and ok(res.rank[i]) else None
         row.update({"close": round(s.c[i], 2), "highest_close": round(hc, 2) if hc else None,
                     "rank": int(rk) if rk else None, "new_stop": new_stop,
@@ -634,7 +647,7 @@ def cmd_scan(args):
                     "lower_stop": bool(new_stop is not None and cur is not None and new_stop < cur),
                     "exit": exits[0] if exits else None, "exit_reasons": exits, "stop_hit_price": stop_hit,
                     "target": p.get("target"), "target_hit_price": target_hit, "sessions_held": held,
-                    "day_low": round(s.l[i], 2), "day_open": round(s.o[i], 2),
+                    "day_low": round(s.l[i], 2), "day_high": round(s.h[i], 2), "day_open": round(s.o[i], 2),
                     "unrealized_pct": round((s.c[i] / p["entry_price"] - 1) * 100, 2) if p.get("entry_price") else None})
         pos_out.append(row)
 

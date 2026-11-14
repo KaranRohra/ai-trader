@@ -14,8 +14,10 @@ Scripts: `JOURNAL` = `<base>/../trade-journal/scripts/journal.py`, `LAB` = `<bas
 5. Write `~/ai-trader/weekly/<week>.md` with:
    - **Strategy:** name and version (and any open positions from an earlier strategy).
    - **Numbers:** start → end equity, week P&L (₹ and %), since-start P&L, max drawdown, NIFTY 500 week %, and mode (PAPER/LIVE).
-   - **Trades closed:** symbol, entry → exit, R, P&L, exit reason.
-   - **Open positions:** entry, stop, unrealized P&L.
+   - **Trades closed:** symbol, entry → exit, exit reason, net P&L after charges, R, best/worst % while open, % of the best move captured, days held.
+   - **Trades opened:** symbol, fill, stop, target, ₹ at risk.
+   - **Open positions:** entry, current stop, unrealized P&L, best/worst % so far.
+   - **Charges** paid this week, and all-time charges.
    - **Decisions:** taken / vetoed / skipped counts, with each veto reason.
    - **What the bot noticed:** 2–4 factual observations from the data (e.g. "3 of 4 entries came in one sector"). No predictions.
    - **Learning status:** pending suggestions, active trial, veto verdict.

@@ -32,4 +32,4 @@ Scripts: `JOURNAL` = `<this skill's base directory>/../trade-journal/scripts/jou
 Only when the user explicitly asks:
 1. Confirm in a question that real orders will be placed. Show their capital, the active strategy and its risk answers in plain words (`STRAT show`).
 2. Edit `~/ai-trader/config.json` and set `"mode": "LIVE"`.
-3. Paper positions are not carried into LIVE. Close them in the journal first (`JOURNAL close` at the current LTP, reason `paper_to_live`).
+3. Paper positions are not carried into LIVE. Close them in the journal first (`JOURNAL close` at the current LTP, reason `paper_to_live`, `--via paper`).

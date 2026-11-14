@@ -58,7 +58,7 @@ Follow `order-executor` → "Reconcile". Every bot position in `positions.json` 
 Stops and targets sit at Zerodha as GTTs; exit rules, time exits and trailing stops come from the scan. For each position from the scan:
 - `exit == "stop_touched"` / `"target_touched"`:
   - LIVE: the GTT handled it (confirmed in step 5).
-  - PAPER: `python3 JOURNAL close --symbol X --price <stop_hit_price | target_hit_price> --reason stop|target --date <scan as_of>`.
+  - PAPER: `python3 JOURNAL close --symbol X --price <stop_hit_price | target_hit_price> --reason stop|target --via paper --trigger-price <current_stop | target> --date <scan as_of>`.
 - Any other `exit` (the strategy's sell rule or position rule, e.g. `cross_down`, or `time_stop`): sell now (`order-executor` → "Exit"), then `JOURNAL close` with that reason.
 - `raise_stop` (or `lower_stop`) true: the strategy's trailing stop or position rule moved the stop (e.g. to breakeven): `order-executor` → "Trail", then `JOURNAL stop`.
 
@@ -75,11 +75,11 @@ Stops and targets sit at Zerodha as GTTs; exit rules, time exits and trailing st
       Log the veto: `python3 JOURNAL decision --symbol X --decision vetoed --reason "<reason>: <evidence>"`.
    b. **Gap rule.** If today's open (from the quote's ohlc) is above `skip_if_open_above`, log it as `skipped_gap`.
    c. **Size.** Follow `risk-manager` → "Sizing". Use the scan's `qty_est`, re-checked against cash. If cash is short, use a smaller qty or log `skipped_cash`.
-   d. **Order.** Follow `order-executor` → "Entry". In LIVE: a LIMIT CNC buy at `limit_price` with tag `CLAUDEBOT`, then the GTT the strategy needs (stop + target, stop only, or none) immediately after the fill. In PAPER: simulate the fill from the quote. Then `python3 JOURNAL open ...` with the actual fill, stop and target, plus `--strategy`, `--rank` and `--score`.
+   d. **Order.** Follow `order-executor` → "Entry". In LIVE: a LIMIT CNC buy at `limit_price` with tag `CLAUDEBOT`, then the GTT the strategy needs (stop + target, stop only, or none) immediately after the fill. In PAPER: simulate the fill from the quote. Then `python3 JOURNAL open ...` with the actual fill, stop, target, `--strategy`, `--time`, `--day-open` and `--note` (the checks from step a that passed, in one line). The journal takes the signal's numbers from today's scan.
    e. Unfilled within ~3 minutes: cancel the order and log it as `unfilled`. No slot left: log `skipped_slots`.
 
 ## 8. Snapshot
-Get LTPs for all open bot positions (Kite `get_ltp`). Then run `python3 JOURNAL snapshot --prices '{"SYM": price, ...}'`.
+Get LTPs for all open bot positions (Kite `get_ltp`). Then run `python3 JOURNAL snapshot --prices '{"SYM": price, ...}' --scan <today's scan saved_to>`. This updates every open trade in `trades.csv` (last price, unrealized P&L, best/worst price since entry) and writes today's `daily.csv` row.
 
 ## 9. Learning (every run, including holidays)
 1. `python3 SCAN outcomes` fills forward returns into the shadow book.
@@ -89,7 +89,7 @@ Get LTPs for all open bot positions (Kite `get_ltp`). Then run `python3 JOURNAL 
 
 ## 10. Summary for the user (short)
 - Mode, strategy name and version, data date, and the market filter (on/off).
-- A table of actions: exits, stop raises, entries (qty, price, stop, ₹ at risk), vetoes and skips with reasons.
+- A table of actions: exits (net P&L after charges, R), stop raises, entries (qty, fill, stop, target, ₹ at risk, charges), vetoes and skips with reasons.
 - Open positions with unrealized P&L, equity, and week P&L.
 - Anything that needs the user's attention.
 

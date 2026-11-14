@@ -20,7 +20,7 @@ Once a day you type one command and click your broker's login link. Every change
 | Risk | The risk rules **you** chose for this strategy: risk per trade, max positions, weekly loss limit, drawdown halt, market filter, broker stop |
 | Orders | LIMIT CNC buys tagged `CLAUDEBOT`, protected by **GTT orders at Zerodha** (stop and/or target, as the strategy defines) |
 | Exits | The strategy's stop, target, trailing stop, exit rules or time exit |
-| Journal | Every decision with its reason, P&L, R-multiples, daily equity, per strategy |
+| Journal | Every trade in detail, from signal to exit: why it was bought, plan vs fill, itemized charges, ₹ at risk, broker stop, best/worst price while open, net P&L and R. Plus every order and stop change with its time, every skipped signal with its numbers, and daily equity |
 | Learning | Records every near-miss and its outcome. Suggests lessons and tweaks, which apply only if you approve |
 
 ## Strategies
@@ -59,7 +59,7 @@ Then run the setup once. It asks for your capital, walks you through choosing a 
 /ai-trader:trading-setup
 ```
 
-**Updating from v1.0:** run `/plugin marketplace update karan-rohra`. Your settings carry over as pre-filled answers. On your next `/ai-trader:trading-day`, review them once and press Start; open positions keep their GTT stops meanwhile.
+**Updating from v1.0:** run `/plugin marketplace update karan-rohra`. Your settings carry over as pre-filled answers. On your next `/ai-trader:trading-day`, review them once and press Start; open positions keep their GTT stops meanwhile. The journal upgrades itself once (old files are backed up to `journal/backup_before_v2.1/`), and open positions become detailed trade rows.
 
 ## Daily use
 Every trading day around **9:20–10:30 AM IST**:
@@ -70,6 +70,7 @@ Click the Kite login link when it appears. Zerodha requires a fresh login every 
 
 Other skills:
 - `strategies`: see, create, change or switch strategies and their risk rules.
+- `trade-journal`: ask about any trade, e.g. "show my GLAND trade", for the full record and its timeline.
 - `weekly-review`: weekend report.
 - `strategy-lab`: runs monthly by itself.
 
@@ -86,7 +87,8 @@ Other skills:
   strategies/          one folder per strategy: strategy.py (the rules) + strategy.json (settings and
                        the risk rules you confirmed); drafts/ while setting up
   positions.json       the bot's open positions (each remembers its strategy)
-  journal/             trades.csv, decisions.csv, daily.csv
+  journal/             trades.csv (one detailed row per trade), trade_events.csv (every order, GTT and
+                       stop change), decisions.csv, daily.csv
   learning/            shadow_book.csv, lessons.md, pending.json, changelog.md, configs/ (every version)
   weekly/              weekly reports
   data/                cached NSE files

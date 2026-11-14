@@ -13,12 +13,13 @@ Kite MCP tools used: `get_quotes`, `get_ltp`, `get_margins`, `get_holdings`, `ge
 
 ## Entry
 **LIVE:**
-1. `place_order`: exchange NSE, tradingsymbol, transaction_type BUY, quantity, product **CNC**, order_type **LIMIT**, price = `limit_price`, variety regular, validity DAY, tag **CLAUDEBOT**.
+1. `place_order`: exchange NSE, tradingsymbol, transaction_type BUY, quantity, product **CNC**, order_type **LIMIT**, price = `limit_price`, variety regular, validity DAY, tag **CLAUDEBOT**. Then `journal.py event --symbol X --event order_placed --price <limit> --qty <qty> --order-id <id>`.
 2. Poll `get_order_history` (or `get_orders`) every ~30 s for up to 3 minutes.
    - COMPLETE: the fill is `average_price`.
-   - Partially filled after 3 minutes: `cancel_order` the rest and continue with the filled qty.
-   - Nothing filled: `cancel_order` and log `unfilled`.
-   - REJECTED: log the reason, don't retry the same order, and tell the user.
+   - Partially filled after 3 minutes: `cancel_order` the rest (`event --event order_partial --qty <filled>`) and continue with the filled qty.
+   - Nothing filled: `cancel_order` (`event --event order_cancelled`) and log the decision `unfilled`.
+   - REJECTED: `event --event order_rejected --note "<Kite's reason>"`, don't retry the same order, and tell the user.
+   - Note the fill's `exchange_timestamp` time (HH:MM:SS) for the journal.
 3. **Work out the stop and target from the fill** (the signal says which kinds the strategy uses):
    - **Stop:** `stop_level` if the scan gives one (chart-level stops), otherwise fill − `stop_distance` (pct and ATR stops), tick-rounded down. No `stop_type` = the strategy has no stop.
    - **Target:** `target_type` r → fill + `target_value` × (fill − stop), `target_type` pct → fill × (1 + `target_value`/100), tick-rounded up. No `target_type` = no target.
@@ -28,34 +29,34 @@ Kite MCP tools used: `get_quotes`, `get_ltp`, `get_margins`, `get_holdings`, `ge
    - **Target only** (no stop allowed by the user's risk answers): a single GTT at the target, limit_price = target × 0.995.
    - **Neither:** no GTT. The position is closed only by the strategy's exit rules.
    - Kite requires stop < LTP < target. If the LTP is already at or below the stop, sell at MARKET instead and journal `stop`.
-   - Save the returned GTT id.
+   - Save the returned GTT id. A failed attempt: `event --event error --note "<what failed>"`.
 5. If a GTT with a stop fails twice and the strategy's risk has `broker_stop_required: true`, sell the position at MARKET (CNC, tag CLAUDEBOT) and journal the close with reason `gtt_failed`. If it's false, keep the position, journal it without a GTT id and tell the user.
-6. `journal.py open --symbol X --qty <filled> --price <avg fill> [--stop <stop>] [--target <target>] --strategy <id> --gtt-id <id> --order-id <id> --rank R --score S`.
+6. `journal.py open --symbol X --qty <filled> --price <avg fill> [--stop <stop>] [--target <target>] --strategy <id> --gtt-id <id> --order-id <id> --time <fill time> --day-open <quote ohlc.open> --note "<the judgment checks done>"`. The journal fills in the signal, plan and risk columns from the scan.
 
 **PAPER:**
 1. `get_quotes`. If `ohlc.open` is above `skip_if_open_above`, log `skipped_gap`.
 2. If the LTP is at or below `limit_price`, the fill is the LTP. Otherwise log `unfilled`.
-3. Stop and target as in LIVE step 3. Then `journal.py open --stop --target --strategy` (no GTT id).
+3. Stop and target as in LIVE step 3. Then `journal.py open ... --stop --target --strategy --time <now> --day-open <ohlc.open> --note "..."` (no GTT id, no order id).
 
 ## Exit (a strategy exit rule, a time exit, or a manual close)
 **LIVE:**
-1. `delete_gtt_order` for the position's GTT. If the GTT is already triggered or gone, check holdings first.
-2. `place_order`: SELL, product CNC, order_type MARKET, quantity = the bot's qty only, tag CLAUDEBOT.
-3. Confirm the fill, then `journal.py close --symbol X --price <avg fill> --reason <reason> --order-id <id>`.
+1. `delete_gtt_order` for the position's GTT (`event --event gtt_deleted --gtt-id <id>`). If the GTT is already triggered or gone, check holdings first.
+2. `place_order`: SELL, product CNC, order_type MARKET, quantity = the bot's qty only, tag CLAUDEBOT (`event --event exit_order_placed --order-id <id>`).
+3. Confirm the fill, then `journal.py close --symbol X --price <avg fill> --reason <reason> --via market_sell --trigger-price <LTP when you decided to sell> --order-id <id> --time <fill time> --note "<one line: what the rule saw>"`.
 
-**PAPER:** `journal.py close` at the current LTP.
+**PAPER:** `journal.py close ... --via paper` at the current LTP.
 
 ## Trail (when the scan says `raise_stop` or `lower_stop` for a position)
 `lower_stop` only appears when the strategy's risk has `stops_only_up: false`.
-- **LIVE:** `modify_gtt_order` on the same GTT id: stop trigger = `new_stop`, limit = new_stop × 0.98; keep any target leg and the qty unchanged. If modify fails, delete the GTT and place a new one, saving the new id. If the position had no GTT yet, place a single stop GTT. Then `journal.py stop --symbol X --stop <new_stop> --gtt-id <id if changed>`.
-- **PAPER:** `journal.py stop` only.
+- **LIVE:** `modify_gtt_order` on the same GTT id: stop trigger = `new_stop`, limit = new_stop × 0.98; keep any target leg and the qty unchanged. If modify fails, delete the GTT and place a new one, saving the new id (`event --event gtt_replaced --gtt-id <new id> --old <old id>`). If the position had no GTT yet, place a single stop GTT. Then `journal.py stop --symbol X --stop <new_stop> --gtt-id <id if changed> --reason <trail | breakeven | the strategy's rule>`.
+- **PAPER:** `journal.py stop ... --reason ...` only.
 
 ## Reconcile (LIVE, start of every run)
 For each position in `positions.json`:
 1. Look it up in `get_holdings` (T1 + settled quantity) and in `get_gtts` (by id).
 2. Held, with the GTT active: OK.
-3. Not held (or the qty dropped), with the GTT triggered: find the sell in `get_orders` / order history, or use the triggered leg's price. Then `journal.py close --reason stop` or `--reason target` (whichever leg fired) at the actual fill price.
-4. Held, but the GTT is missing, cancelled or expired (GTTs expire after 1 year): place a new GTT at the journal's stop (and target, if any) and update the id. Positions the journal shows with no stop and no target never had a GTT; that's expected.
+3. Not held (or the qty dropped), with the GTT triggered: find the sell in `get_orders` / order history, or use the triggered leg's price. Then `journal.py close --reason stop --via gtt_stop` or `--reason target --via gtt_target` (whichever leg fired) with `--price <actual avg fill> --trigger-price <that leg's trigger> --order-id <sell order id> --time <fill time> --date <fill date>`.
+4. Held, but the GTT is missing, cancelled or expired (GTTs expire after 1 year): place a new GTT at the journal's stop (and target, if any) and record it: `journal.py event --symbol X --event gtt_replaced --gtt-id <new id> --note "<why>"` (this also updates the id). Positions the journal shows with no stop and no target never had a GTT; that's expected.
 5. Qty mismatch you can't explain: don't trade that symbol, and tell the user.
 
 Holdings that aren't in `positions.json` belong to the user. Ignore them completely.
