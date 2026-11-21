@@ -3,6 +3,7 @@
 A Claude Code plugin that runs a trading system end to end through your broker:
 - **any strategy:** ready-made ones, or your own described in plain words;
 - **risk rules you choose** for each strategy;
+- **backtests** of any strategy on 10+ years of NSE data, with a full report;
 - order placement with broker-side stop-losses;
 - a journal, weekly reviews and a self-improvement loop.
 
@@ -44,9 +45,32 @@ Setup is a guided chat. You never edit files.
 2. Keep or change its stop-loss, target and sell rules.
 3. Answer the risk questions: risk per trade, max positions, max position size, market filter, weekly loss limit, drawdown halt, broker stop. Each option is explained in rupees for your capital, and "No limit" is always a valid answer.
 4. **Any more rules?** Add anything else, e.g. "max 2 stocks per sector" or "move my stop to breakeven after +5%".
-5. Everything appears on one **review screen**: **Start**, **Change something** or **Cancel**.
+5. **Backtest it?** Optional: see how these exact rules and risk answers would have traded on past data.
+6. Everything appears on one **review screen**: **Start**, **Change something** or **Cancel**. If you backtested, the result is on it.
 
 The bot won't place a trade until every rule is answered, checked and confirmed. The one rule for every strategy: the bot never touches holdings outside its own positions.
+
+## Backtest before you trade
+```
+/ai-trader:backtest
+```
+Pick a strategy (yours, a ready-made one, or one you're still setting up), a period (up to 2014 → today) and a starting capital. The backtest replays it **exactly like the live bot trades it**: the same script and risk rules, signals at the close, LIMIT buys the next morning, stops and targets filled like Zerodha GTT orders, delivery costs included. Each run saves:
+- `report.html`: opens in your browser. It shows equity and drawdown vs NIFTY 500, year by year, month by month, before vs after 2021, why signals were skipped, the rules tested and every trade. Works offline.
+- `summary.json`, `trades.csv` (opens in Excel / Sheets) and `equity.csv`.
+
+![Backtest report](docs/backtest-report.jpg)
+
+The first backtest downloads the NSE history it needs, once. Ten years is about 150 MB and 20–25 minutes from NSE's free archive. It asks before starting, shows progress, and can be stopped and resumed.
+
+**The ready-made strategies** (2016-01-01 → 2026-11-13, ₹1,00,000, their suggested risk settings, costs included):
+
+| | CAGR | Max drawdown | Trades | Won | Worst week | Before 2021 / 2021 onward (CAGR) |
+|---|---|---|---|---|---|---|
+| Momentum Breakout | 20.8% | −22.8% | 261 | 53% | −8.9% | 14.6% / 26.4% |
+| EMA 20/50 Crossover | 17.1% | −26.7% | 470 | 31% | −10.8% | 15.2% / 18.7% |
+| NIFTY 500 index (price) | 12.3% | −38.3% | | | | |
+
+How the test works and what it doesn't model (slippage beyond the limit price, real past index lists, taxes) is listed in every report. A backtest is history, not a forecast.
 
 ## Install
 You need [Claude Code](https://claude.com/claude-code), Python 3.8+ (no extra packages) and a Zerodha account.
@@ -70,6 +94,7 @@ Click the Kite login link when it appears. Zerodha requires a fresh login every 
 
 Other skills:
 - `strategies`: see, create, change or switch strategies and their risk rules.
+- `backtest`: test any strategy on past data, any time.
 - `trade-journal`: ask about any trade, e.g. "show my GLAND trade", for the full record and its timeline.
 - `weekly-review`: weekend report.
 - `strategy-lab`: runs monthly by itself.
@@ -91,6 +116,7 @@ Other skills:
                        stop change), decisions.csv, daily.csv
   learning/            shadow_book.csv, lessons.md, pending.json, changelog.md, configs/ (every version)
   weekly/              weekly reports
+  backtests/           one folder per backtest: report.html, summary.json, trades.csv, equity.csv
   data/                cached NSE files
 ```
 

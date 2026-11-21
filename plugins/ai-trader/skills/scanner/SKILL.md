@@ -34,7 +34,9 @@ Each strategy is a folder: `strategy.json` (settings) + `strategy.py` (logic). T
   It also adds near-misses (stocks failing at most 2 rules) to the shadow book for learning.
 - `--strategy <id or folder>` scans another strategy, `--date YYYY-MM-DD --no-shadow` scans a past date.
 - `python3 scripts/scan.py outcomes` fills forward returns into the shadow book.
-- `python3 scripts/scan.py backtest --strategy <id> --from 2016-01-01` replays a strategy over history. It's used by the strategy-lab to test ideas before suggesting them; it isn't part of strategy setup:
+- `python3 scripts/scan.py backtest --strategy <id> --from 2016-01-01 [--capital ₹] [--open]` replays a strategy over history. Users run it through the `backtest` skill (`/ai-trader:backtest`, which also handles the first data download via `scan.py data-plan`); the strategy-lab uses it to test ideas before suggesting them:
+  - Output folder `~/ai-trader/backtests/<strategy>_<version>_<from>_<to>/`: `report.html` (charts + every trade, `scripts/report.py`), `summary.json`, `trades.csv`, `equity.csv`. The JSON has `summary_card` (show as is) and `report`.
+  - More than 40 missing days → it stops with `"problem": "data_missing"` and a `data_plan` (download year by year first: `scan.py update --from --to`).
   - The universe is a monthly point-in-time proxy for the strategy's index, built from 6-month traded value (NIFTY 500 = top 500, Midcap 150 = ranks 101–250, ...), including delisted stocks.
   - It counts Zerodha delivery costs, and simulates the weekly loss limit and drawdown halt (`--no-limits` to turn them off).
   - It reports the full period, in-sample (before 2021), out-of-sample (2021 onward), year by year, the worst week and month, and `risk_suggestions` for the risk questions.

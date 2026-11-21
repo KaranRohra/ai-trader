@@ -22,11 +22,12 @@ Scripts: `JOURNAL` = `<this skill's base directory>/../trade-journal/scripts/jou
    - keep or change its settings;
    - answer every risk question (nothing assumed);
    - add any more rules;
+   - optionally backtest it on years of past data (the user's choice);
    - review screen → Start.
    The bot can't place a trade until this is done.
 7. **Test scan:** `python3 SCAN scan --equity <capital> --no-shadow`. Show the strategy, the market filter, and how many signals there are today.
 8. **Kite:** call the Kite MCP `login` tool, let them click the link, then `get_profile`. That confirms the connection works.
-9. **Daily use, tell them:** every trading day around 9:20–10:30 AM IST, run `/trading-day` and click the Kite login link. Everything else is automatic. Stops and targets sit at Zerodha as GTT orders, so the computer doesn't need to stay on. To see, change or switch strategies or risk rules later, ask for the `strategies` skill.
+9. **Daily use, tell them:** every trading day around 9:20–10:30 AM IST, run `/trading-day` and click the Kite login link. Everything else is automatic. Stops and targets sit at Zerodha as GTT orders, so the computer doesn't need to stay on. To see, change or switch strategies or risk rules later, ask for the `strategies` skill. To test any strategy on past data any time, run `/ai-trader:backtest`.
 
 ## Switching to LIVE later
 Only when the user explicitly asks:

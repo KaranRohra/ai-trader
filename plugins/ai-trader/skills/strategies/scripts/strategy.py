@@ -508,10 +508,11 @@ def cmd_review(a):
     else:
         f = bt["full"]
         sections.append((f"BACKTEST {f['from'][:7]} to {f['to'][:7]} (with all your answers applied)", [
-            f"CAGR {f['cagr_pct']}% · max drawdown {f['max_drawdown_pct']}% · {f['trades']} trades · win rate {f['win_rate_pct']}%",
-            f"Worst week {f['worst_week_pct']}% · worst month {f['worst_month_pct']}% ({f['worst_month']})",
-            f"NIFTY 500 same period: CAGR {f.get('nifty500_cagr_pct')}% · max drawdown {f.get('nifty500_max_drawdown_pct')}%",
-            "Costs included. A backtest is history, not a forecast."]))
+            f"{_rupees(f['start_equity'])} → {_rupees(f['end_equity'])} ({f['total_return_pct']:+}%)",
+            f"CAGR {f['cagr_pct']:.1f}% · max drawdown {f['max_drawdown_pct']:.1f}% · {f['trades']} trades · win rate {f['win_rate_pct'] or 0:.1f}%",
+            f"Worst week {f['worst_week_pct']:.1f}% · worst month {f['worst_month_pct']:.1f}% ({f['worst_month']})",
+            f"NIFTY 500 same period: CAGR {f.get('nifty500_cagr_pct') or 0:.1f}% · max drawdown {f.get('nifty500_max_drawdown_pct') or 0:.1f}%",
+            "Costs included. A backtest is history, not a forecast."] + ([f"Full report: {bt['report']}"] if bt.get("report") else [])))
     title = f"Your strategy: {d['name']} ({d['version']})          Capital {_rupees(cap)} · {c.get('mode', 'PAPER')}"
     card = _box(title, sections, ["Start with these rules   ·   Change something   ·   Cancel"])
     d["_reviewed"] = _fingerprint(d, script)

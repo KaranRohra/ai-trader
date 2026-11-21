@@ -19,6 +19,7 @@ import math
 from collections import deque
 
 import engine
+import report
 import scan
 from engine import Ctx, IndexData, ok
 from scan import EQ_DIR, HOME, Panel, assign_ranks, log, update
@@ -27,6 +28,8 @@ COST_SIDE = 0.0012
 DP_CHARGE = 16.0
 DELIST_DAYS = 20
 WEEKLY_LEVELS = [3, 4, 5, 6, 8, 10, 12, 15, 20]
+EARLIEST_FROM = dt.date(2014, 1, 1)  # NSE index closes start Mar 2012; +~400 days warm-up for 200-day averages
+MAX_INLINE_DOWNLOAD = 40  # more missing days than this -> download first (data-plan), not inside the backtest
 
 
 def _candidates(start, end, top=700, window=126):
@@ -489,16 +492,83 @@ def _report(st, dates, eq, bench, trades, extra, split, use_limits):
     return summary
 
 
+def warmup_start(st, start):
+    """First day of data a backtest from `start` needs (indicators + the 6-month liquidity ranking)."""
+    return start - dt.timedelta(days=max(430, int(st.history * 1.5) + 60))
+
+
+def bot_capital():
+    return float((engine.config() or {}).get("capital") or 100000)
+
+
+def summary_card(summary, report_path=None):
+    """The fixed text box shown in chat after a backtest (same style as the strategy review screen)."""
+    f = summary["full"]
+    rp = report.rupees
+    title = (f"Backtest: {summary['strategy_name']} ({summary['strategy_version']})          "
+             f"{rp(f['start_equity'])} · {f['from']} to {f['to']}")
+
+    def pc(v, sign=True):
+        return "–" if v is None else (f"{v:+.1f}%" if sign else f"{v:.1f}%")
+    sections = [
+        ("RESULT", [
+            f"{rp(f['start_equity'])} → {rp(f['end_equity'])} ({pc(f['total_return_pct'])}) · CAGR {pc(f['cagr_pct'], False)} a year",
+            f"Max drawdown {pc(f['max_drawdown_pct'], False)} (biggest fall from a peak)",
+            f"{f['trades']} trades · {pc(f['win_rate_pct'], False)} won · avg hold {f['avg_hold_days'] or '–'} days",
+            f"Worst week {pc(f['worst_week_pct'])} (ending {f['worst_week_ending']}) · worst month {pc(f['worst_month_pct'])} ({f['worst_month']})",
+        ]),
+        ("NIFTY 500, SAME PERIOD", [
+            f"CAGR {pc(f.get('nifty500_cagr_pct'), False)} · max drawdown {pc(f.get('nifty500_max_drawdown_pct'), False)}"]),
+    ]
+    if summary.get("by_year"):
+        yrs = summary["by_year"]
+        sections.append(("YEAR BY YEAR (strategy / NIFTY 500)", [
+            " · ".join(f"{y}: {pc(v['return_pct'])} / {pc(v['nifty500_pct'])}" for y, v in list(yrs.items())[i:i + 3])
+            for i in range(0, len(yrs), 3)]))
+    rows = []
+    try:
+        rows = report.words_module().risk_words(summary.get("risk_rules") or {}, f["start_equity"])
+    except Exception:
+        pass
+    if rows:
+        w = max(len(r[0]) for r in rows)
+        src = report.RISK_SOURCE_WORDS.get(summary["risk_used"], summary["risk_used"])
+        sections.append(("RISK RULES USED", [f"{a.ljust(w)}  {b}" for a, b, _ in rows] + [f"From: {src}"]))
+    footer = ["Costs included (Zerodha delivery). A backtest is history, not a forecast."]
+    if report_path:
+        footer.append(f"Full report: {report_path}")
+    lines = [title, ""]
+    for head, rs in sections:
+        lines.append(head)
+        lines += [f" • {r}" for r in rs]
+        lines.append("")
+    return "\n".join(lines + footer)
+
+
 def run_backtest(args):
     base = engine.load(args.strategy)
     st = _variant(base, args.set)
+    if args.capital is None:
+        args.capital = bot_capital()
     if st.risk is None:
         raise engine.StrategyError("no risk settings to test with: confirm the strategy's risk block or pass "
                                    "--set risk.sizing='{\"type\": \"risk\", \"pct\": 1}' etc.")
     start = dt.date.fromisoformat(args.start)
     end = dt.date.fromisoformat(args.end) if args.end else dt.date.today()
-    warm = start - dt.timedelta(days=max(430, int(st.history * 1.5) + 60))
+    if start < EARLIEST_FROM:
+        raise engine.StrategyError(f"the earliest start date is {EARLIEST_FROM} (NSE's free archive + warm-up data)")
+    if (end - start).days < 180:
+        raise engine.StrategyError("pick a period of at least 6 months")
+    warm = warmup_start(st, start)
     if not args.no_update:
+        missing = scan.missing_days(warm, end)
+        if len(missing) > MAX_INLINE_DOWNLOAD:
+            plan = scan.data_plan(warm, end)
+            print(json.dumps({"ok": False, "problem": "data_missing",
+                              "message": f"{plan['est_trading_days']} trading days of NSE data need downloading first "
+                                         f"(~{plan['est_mb']} MB, about {plan['est_minutes']} min)",
+                              "data_plan": plan}, indent=1))
+            raise SystemExit(2)
         update(warm, end)
     log("backtest: pass 1 (liquid-stock candidates)...")
     cands = _candidates(warm, end)
@@ -551,6 +621,8 @@ def run_backtest(args):
     summary = _report(vst, dates, eq, bench, trades, extra, split, use_limits)
     summary["settings_overridden"] = args.set
     summary["strategy_file"] = vst.data
+    summary["risk_rules"] = vst.risk
+    summary["capital"] = args.capital
     summary["fingerprint"] = engine.fingerprint(vst.data, vst.script) if not args.set and use_limits else None
     (out / "summary.json").write_text(json.dumps(summary, indent=1, default=str))
     with (out / "trades.csv").open("w", newline="") as fh:
@@ -563,4 +635,12 @@ def run_backtest(args):
         w.writerow(["date", "equity", "nifty500"])
         w.writerows((d.isoformat(), round(e, 2), b) for d, e, b in zip(dates, eq, bench))
     summary["output_folder"] = str(out)
-    print(json.dumps({k: v for k, v in summary.items() if k != "strategy_file"}, indent=1, default=str))
+    rep = report.build(out)
+    summary["report"] = str(rep)
+    summary["summary_card"] = summary_card(summary, rep)
+    (out / "summary.json").write_text(json.dumps(summary, indent=1, default=str))
+    if args.open:
+        import webbrowser
+        webbrowser.open(rep.as_uri())
+    print(json.dumps({k: v for k, v in summary.items() if k != "strategy_file"},
+                     indent=1, default=str, ensure_ascii=False))

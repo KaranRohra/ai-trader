@@ -8,7 +8,8 @@ Commands
   update                 download any missing days (first run: ~15 months, then 1 file/day)
   scan                   today's market filter, entry signals, and exit/stop updates for open positions (JSON)
   outcomes               fill forward returns (+5/+10/+20/+60 sessions) into the shadow book
-  backtest               replay a strategy over history (see backtest --help)
+  backtest               replay a strategy over history + HTML report (see backtest --help)
+  data-plan              what a backtest still needs to download (days, MB, minutes)
 
 The rules come from the strategy file (default: the active strategy in ~/ai-trader/config.json).
 """
@@ -158,12 +159,7 @@ def update(start=None, end=None, quiet=False):
     start = start or (end - dt.timedelta(days=460))  # ~15 months -> >300 sessions
     index = _jload(INDEX_FILE, {})
     nodata = set(_jload(HOLIDAYS_FILE, []))
-    todo, d = [], start
-    while d <= end:
-        key = d.strftime("%Y%m%d")
-        if d.weekday() < 5 and key not in nodata and not ((EQ_DIR / f"{key}.csv.gz").exists() and key in index):
-            todo.append(d)
-        d += dt.timedelta(days=1)
+    todo = missing_days(start, end)
     if todo and not quiet:
         log(f"update: fetching {len(todo)} day(s) from NSE archives ({todo[0]} .. {todo[-1]})")
 
@@ -180,9 +176,17 @@ def update(start=None, end=None, quiet=False):
         return day, bhav, idx, e1 or e2
 
     from concurrent.futures import ThreadPoolExecutor
-    n_new = 0
+    n_new, t0 = 0, time.time()
+
+    def save():  # saved as we go, so a stopped download resumes where it left off
+        INDEX_FILE.write_text(json.dumps(dict(sorted(index.items()))))
+        HOLIDAYS_FILE.write_text(json.dumps(sorted(nodata)))
     with ThreadPoolExecutor(max_workers=4) as pool:
-        for day, bhav, idx, err in pool.map(one, todo):
+        for n, (day, bhav, idx, err) in enumerate(pool.map(one, todo), 1):
+            if not quiet and n % 50 == 0 and len(todo) > 60:
+                left = (time.time() - t0) / n * (len(todo) - n)
+                log(f"  {n}/{len(todo)} days checked ({100 * n // len(todo)}%, at {day}), about {math.ceil(left / 60)} min left")
+                save()
             key = day.strftime("%Y%m%d")
             if bhav is None:
                 # both files missing (404 or connection reset) for a past date -> market holiday
@@ -201,15 +205,53 @@ def update(start=None, end=None, quiet=False):
             if close:
                 index[key] = close
             n_new += 1
-            if not quiet and n_new % 100 == 0:
-                log(f"  {n_new} days done (at {day})")
     fetched = len(todo)
-    INDEX_FILE.write_text(json.dumps(dict(sorted(index.items()))))
-    HOLIDAYS_FILE.write_text(json.dumps(sorted(nodata)))
+    save()
     ensure_list("nifty500")
     if not quiet:
         log(f"update: {n_new} new trading days cached (checked {fetched} weekdays)")
     return n_new
+
+SECONDS_PER_DAY = 0.5  # measured: ~4 parallel downloads -> roughly 2 trading days per second incl. pauses
+DEFAULT_DAY_MB = 0.09    # one cached day (all NSE cash stocks, gzipped)
+
+
+def missing_days(start, end):
+    """Weekdays between start and end that aren't cached yet (known holidays excluded)."""
+    index = _jload(INDEX_FILE, {})
+    nodata = set(_jload(HOLIDAYS_FILE, []))
+    todo, d = [], start
+    while d <= end:
+        key = d.strftime("%Y%m%d")
+        if d.weekday() < 5 and key not in nodata and not ((EQ_DIR / f"{key}.csv.gz").exists() and key in index):
+            todo.append(d)
+        d += dt.timedelta(days=1)
+    return todo
+
+
+def data_plan(start, end):
+    """What a run from start to end still needs to download: days, size, time and year-sized chunks. Downloads nothing."""
+    todo = missing_days(start, end)
+    have = list(EQ_DIR.glob("*.csv.gz")) if EQ_DIR.exists() else []
+    day_mb = (sum(f.stat().st_size for f in have) / len(have) / 1e6) if len(have) >= 20 else DEFAULT_DAY_MB
+    chunks, years = [], sorted({d.year for d in todo})
+    for y in years:
+        ds = [d for d in todo if d.year == y]
+        chunks.append({"from": ds[0].isoformat(), "to": ds[-1].isoformat(), "weekdays": len(ds)})
+    trading = round(len(todo) * 0.96)  # ~4% of weekdays are market holidays
+    return {
+        "from": start.isoformat(), "to": end.isoformat(),
+        "days_cached": len(have), "weekdays_missing": len(todo),
+        "download_needed": len(todo) > 10,
+        "est_trading_days": trading,
+        "est_mb": round(trading * day_mb),
+        "est_minutes": max(1, math.ceil(len(todo) * SECONDS_PER_DAY / 60)) if todo else 0,
+        "source": "free official NSE archive files (no login)",
+        "chunks": chunks,
+        "how": "download one chunk per command: scan.py update --from <chunk from> --to <chunk to>. "
+               "Safe to stop: finished days are kept and the next run continues.",
+    }
+
 
 # ---------------------------------------------------------------- panel (adjusted series)
 
@@ -765,7 +807,7 @@ def main():
     b.add_argument("--strategy", help="strategy id or .json path (default: the active strategy)")
     b.add_argument("--from", dest="start", default="2016-01-01")
     b.add_argument("--to", dest="end")
-    b.add_argument("--capital", type=float, default=100000)
+    b.add_argument("--capital", type=float, help="starting capital in ₹ (default: the bot's capital in config.json)")
     b.add_argument("--split", default="2021-01-01", help="out-of-sample starts on this date")
     b.add_argument("--out", help="folder for trades.csv / equity.csv / summary.json")
     b.add_argument("--set", action="append", default=[], metavar="KEY=VALUE",
@@ -775,6 +817,11 @@ def main():
                    help="run once per value of one setting on the same data, e.g. risk.sizing.pct=1,1.5,2")
     b.add_argument("--no-limits", action="store_true", help="ignore the weekly limit and drawdown halt")
     b.add_argument("--no-update", action="store_true")
+    b.add_argument("--open", action="store_true", help="open report.html in the browser when done")
+    dp = sub.add_parser("data-plan", help="what a backtest still needs to download (days, MB, minutes); downloads nothing")
+    dp.add_argument("--strategy", help="strategy id or folder (sets the warm-up; default: the active strategy)")
+    dp.add_argument("--from", dest="start", default="2016-01-01")
+    dp.add_argument("--to", dest="end")
     a = ap.parse_args()
     if a.cmd == "update":
         update(dt.date.fromisoformat(a.start) if a.start else None, dt.date.fromisoformat(a.end) if a.end else None)
@@ -785,6 +832,15 @@ def main():
             sys.exit(f"strategy problem: {e}")
     elif a.cmd == "outcomes":
         cmd_outcomes(a)
+    elif a.cmd == "data-plan":
+        from backtest import warmup_start  # sibling file
+        try:
+            st = engine.load(a.strategy)
+        except engine.StrategyError as e:
+            sys.exit(f"strategy problem: {e}")
+        start = dt.date.fromisoformat(a.start)
+        end = dt.date.fromisoformat(a.end) if a.end else dt.date.today()
+        print(json.dumps(dict(data_plan(warmup_start(st, start), end), backtest_from=start.isoformat()), indent=1))
     elif a.cmd == "backtest":
         from backtest import run_backtest  # sibling file
         try:

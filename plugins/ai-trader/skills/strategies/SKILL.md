@@ -1,6 +1,6 @@
 ---
 name: strategies
-description: Choose, set up, create, edit or switch the AI Trader's trading strategy - ready-made strategies (Momentum Breakout, EMA 20/50 Crossover) or the user's own described in plain words (any technical rule) - through a guided chat flow - settings, every risk rule, extra rules, a review screen and the user's confirmation. Use when the user wants to see strategies, add their own, change rules or risk, or switch what the bot trades.
+description: Choose, set up, create, edit or switch the AI Trader's trading strategy - ready-made strategies (Momentum Breakout, EMA 20/50 Crossover) or the user's own described in plain words (any technical rule) - through a guided chat flow - settings, every risk rule, extra rules, an optional backtest, a review screen and the user's confirmation. Use when the user wants to see strategies, add their own, change rules or risk, or switch what the bot trades.
 ---
 
 # Strategies
@@ -20,7 +20,7 @@ Scripts: `STRAT` = `<this skill's base directory>/scripts/strategy.py`, `SCAN` =
 The only rule that is the same for every strategy (not asked): **bot-only positions.** The bot never touches holdings outside the bot and never buys a stock the user already holds outside it.
 
 ## The setup flow
-Order: pick → check → settings → risk questions → **"Any more rules?"** → review → Start. This skill doesn't backtest. Users may have tested the strategy elsewhere and come here to automate it. If they have a backtest summary of this exact draft, it can be shown on the review screen (`STRAT review --backtest <summary.json>`).
+Order: pick → check → settings → risk questions → **"Any more rules?"** → **backtest (optional)** → review → Start. The backtest is the user's choice: they may have tested the strategy elsewhere and only want to automate it. The user can also run `/ai-trader:backtest` on its own any time.
 
 ### Step 1 · Pick a strategy
 `python3 STRAT list`. Ask with one pop-up: the ready-made strategies (label = name, description = `style` + one line from `about`), plus **"Describe my own strategy"** (→ "Your own strategy" below, then come back to step 3). If the user already has one set up, mention which is active.
@@ -64,8 +64,15 @@ Ask with a pop-up: **"Any more rules you'd like to add?"**, with options "No, th
 4. `STRAT check --id <id>`, read the new rule back in plain words, and ask "Any more rules?" again until they say no.
 5. If a rule can't be built yet (`STRAT vocabulary` → `not_supported_yet`: fundamentals, intraday prices, short selling/F&O, selling part of a position, other order types, news), say so plainly and offer the closest technical alternative. Never add it silently in some other form.
 
-### Step 6 · Review screen
-1. `python3 STRAT review --id <id>` → show `review_screen` **exactly as returned, inside a code block**.
+### Step 6 · Backtest it before you start? (optional)
+Ask with a pop-up: **"Backtest it before you start?"**. Options:
+- **"Backtest it"**: see how these exact rules and risk answers would have traded on past NSE data, with a full report.
+- **"Skip, go to the review"**.
+
+If they choose to backtest, follow the `backtest` skill from its step 2 (period and capital → data check → run → show the result), with the draft folder `~/ai-trader/strategies/drafts/<id>` as the strategy. Then go to the review with `--backtest <output_folder>/summary.json`. If the user changes anything after the backtest, the review refuses that summary (`rerun_backtest`): offer to backtest again, or review without it.
+
+### Step 7 · Review screen
+1. `python3 STRAT review --id <id> [--backtest <summary.json>]` → show `review_screen` **exactly as returned, inside a code block**.
 2. Ask: **Start with these rules** / **Change something** / **Cancel**.
    - **Start:** `python3 STRAT confirm --id <id> --activate`. If `open_positions_from_other_strategies` is not empty, explain that those positions keep the stop, target and sell rules of the strategy that opened them.
    - **Change something:** ask which item, go back to that step, save the new answer, then show a fresh review screen.
@@ -104,7 +111,7 @@ Ask with a pop-up: **"Any more rules you'd like to add?"**, with options "No, th
    - how many signals it found in the last year;
    - 3–5 `recent_examples` in plain words, e.g. "KALYANKJIL, 11 Nov 2026: opened 3%+ up, closed green, volume 9× its average".
    Then ask with a pop-up: "Is this exactly your strategy?" (Yes / Change something).
-6. Continue with step 3 (settings) → 4 (risk questions) → 5 (more rules) → 6 (review), exactly as for a ready-made strategy.
+6. Continue with step 3 (settings) → 4 (risk questions) → 5 (more rules) → 6 (optional backtest) → 7 (review), exactly as for a ready-made strategy.
 7. Limits to mention when relevant:
    - daily NSE end-of-day data only (no intraday), NSE cash stocks only (delivery/CNC), long only;
    - entries the morning after the signal;
@@ -112,7 +119,7 @@ Ask with a pop-up: **"Any more rules you'd like to add?"**, with options "No, th
    - technical data only (rule 6).
 
 ## Changing things later
-- **"Change my risk" / "change the stop" / "add a rule"** etc.: `STRAT draft --id <active>` pre-fills the current answers. Ask only what they want to change (a new rule follows step 5), then the review screen (step 6) and confirm. A changed strategy gets a new version (v1.0 → v1.1); the old one is archived for rollback.
+- **"Change my risk" / "change the stop" / "add a rule"** etc.: `STRAT draft --id <active>` pre-fills the current answers. Ask only what they want to change (a new rule follows step 5), then the optional backtest (step 6), the review screen (step 7) and confirm. A changed strategy gets a new version (v1.0 → v1.1); the old one is archived for rollback.
 - **"Switch strategy":** step 1. If the other strategy is already set up and the user doesn't want changes, show `STRAT show --id <id>` and confirm with a pop-up before `STRAT activate --id <id>`.
 - Existing positions keep their GTT stops and targets. New rules apply to new entries, and exit rules apply from the next run.
 - **"What am I running?":** `STRAT summary` (short) or `STRAT show --id <id>` (full).
