@@ -10,6 +10,7 @@ Commands
   outcomes               fill forward returns (+5/+10/+20/+60 sessions) into the shadow book
   backtest               replay a strategy over history + HTML report (see backtest --help)
   data-plan              what a backtest still needs to download (days, MB, minutes)
+  update-indices         read benchmark index closes (NIFTY 50 ... Smallcap 250) for cached days that lack them
 
 The rules come from the strategy file (default: the active strategy in ~/ai-trader/config.json).
 """
@@ -40,6 +41,7 @@ HOME = engine.HOME
 DATA = HOME / "data"
 EQ_DIR = DATA / "eq"
 INDEX_FILE = DATA / "index_nifty500.json"
+INDICES_FILE = DATA / "indices.json"   # other index closes, for backtest benchmarks: {id: {YYYYMMDD: close}, "_seen": [...]}
 HOLIDAYS_FILE = DATA / "no_data_days.json"
 SHADOW = HOME / "learning" / "shadow_book.csv"
 
@@ -47,6 +49,15 @@ UA = "Mozilla/5.0 (compatible; ai-trader/2.0; daily NSE archive download)"
 UDIFF_START = dt.date(2024, 7, 8)  # NSE switched the bhavcopy format on this date
 KEEP_SERIES = {"EQ", "BE", "BZ"}
 INDEX_NAMES = {"nifty 500", "cnx 500"}
+INDEX_ALIASES = {  # benchmark id -> names in NSE's daily ind_close_all file (old "CNX" names before 2015)
+    "nifty50": {"nifty 50", "cnx nifty", "s&p cnx nifty"},
+    "nifty100": {"nifty 100", "cnx 100"},
+    "nifty200": {"nifty 200", "cnx 200"},
+    "nifty500": INDEX_NAMES,
+    "midcap150": {"nifty midcap 150"},
+    "smallcap250": {"nifty smallcap 250"},
+}
+INDEX_SECONDS_PER_DAY = 0.08  # index-only files are small
 
 # ---------------------------------------------------------------- utilities
 
@@ -147,6 +158,82 @@ def _parse_index(raw):
     return None
 
 
+def _parse_indices(raw):
+    """{benchmark id: close} for every benchmark index in one ind_close_all file."""
+    out = {}
+    for r in csv.DictReader(io.StringIO(raw.decode("utf-8", "replace"))):
+        name = (r.get("Index Name") or "").strip().lower()
+        for bid, names in INDEX_ALIASES.items():
+            if name in names and bid not in out:
+                v = _f(r.get("Closing Index Value"))
+                if v:
+                    out[bid] = v
+    return out
+
+
+def _store_indices(store, key, raw):
+    for bid, v in _parse_indices(raw).items():
+        store.setdefault(bid, {})[key] = v
+    seen = store.setdefault("_seen", [])
+    if key not in seen:
+        seen.append(key)
+
+
+def _save_indices(store):
+    store["_seen"] = sorted(set(store.get("_seen", [])))
+    INDICES_FILE.write_text(json.dumps({k: (dict(sorted(v.items())) if isinstance(v, dict) else v)
+                                        for k, v in sorted(store.items())}))
+
+
+def benchmark_gaps(bid, start, end):
+    """Cached trading days between start and end whose index file hasn't been read for benchmarks yet."""
+    if bid in (None, "none", "nifty500"):
+        return []   # NIFTY 500 closes are kept with every day already
+    seen = set(_jload(INDICES_FILE, {}).get("_seen", []))
+    lo, hi = start.strftime("%Y%m%d"), end.strftime("%Y%m%d")
+    return [dt.datetime.strptime(f.name[:8], "%Y%m%d").date() for f in sorted(EQ_DIR.glob("*.csv.gz"))
+            if lo <= f.name[:8] <= hi and f.name[:8] not in seen]
+
+
+def update_indices(start, end, quiet=False):
+    """Read the benchmark indices for cached days that don't have them yet (small NSE index files only)."""
+    todo = benchmark_gaps("any", start, end)
+    if not todo:
+        return 0
+    store = _jload(INDICES_FILE, {})
+    if not quiet:
+        log(f"benchmarks: fetching {len(todo)} NSE index file(s) ({todo[0]} .. {todo[-1]})")
+
+    def one(day):
+        try:
+            raw = fetch(f"https://nsearchives.nseindia.com/content/indices/ind_close_all_{day:%d%m%Y}.csv")
+        except Exception:
+            raw = None
+        time.sleep(0.1)
+        return day, raw
+    from concurrent.futures import ThreadPoolExecutor
+    done = 0
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        for n, (day, raw) in enumerate(pool.map(one, todo), 1):
+            if raw:
+                _store_indices(store, day.strftime("%Y%m%d"), raw)
+                done += 1
+            if n % 200 == 0:
+                _save_indices(store)
+                if not quiet:
+                    log(f"  {n}/{len(todo)} index files read")
+    _save_indices(store)
+    return done
+
+
+def benchmark_closes(bid, days):
+    """Closes of benchmark `bid` for each YYYYMMDD in days (None where NSE has no value, e.g. before the index existed)."""
+    if bid in (None, "none"):
+        return [None] * len(days)
+    src = _jload(INDEX_FILE, {}) if bid == "nifty500" else _jload(INDICES_FILE, {}).get(bid, {})
+    return [src.get(d) for d in days]
+
+
 def _jload(p, default):
     return json.loads(p.read_text()) if p.exists() else default
 
@@ -158,6 +245,7 @@ def update(start=None, end=None, quiet=False):
     end = end or today
     start = start or (end - dt.timedelta(days=460))  # ~15 months -> >300 sessions
     index = _jload(INDEX_FILE, {})
+    indices = _jload(INDICES_FILE, {})
     nodata = set(_jload(HOLIDAYS_FILE, []))
     todo = missing_days(start, end)
     if todo and not quiet:
@@ -181,6 +269,7 @@ def update(start=None, end=None, quiet=False):
     def save():  # saved as we go, so a stopped download resumes where it left off
         INDEX_FILE.write_text(json.dumps(dict(sorted(index.items()))))
         HOLIDAYS_FILE.write_text(json.dumps(sorted(nodata)))
+        _save_indices(indices)
     with ThreadPoolExecutor(max_workers=4) as pool:
         for n, (day, bhav, idx, err) in enumerate(pool.map(one, todo), 1):
             if not quiet and n % 50 == 0 and len(todo) > 60:
@@ -204,6 +293,8 @@ def update(start=None, end=None, quiet=False):
             close = _parse_index(idx) if idx else None
             if close:
                 index[key] = close
+            if idx:
+                _store_indices(indices, key, idx)
             n_new += 1
     fetched = len(todo)
     save()
@@ -229,8 +320,9 @@ def missing_days(start, end):
     return todo
 
 
-def data_plan(start, end):
-    """What a run from start to end still needs to download: days, size, time and year-sized chunks. Downloads nothing."""
+def data_plan(start, end, benchmark=None, bench_from=None):
+    """What a run from start to end still needs to download: days, size, time and year-sized chunks. Downloads nothing.
+    benchmark: also count the cached days whose index file must be read for that benchmark (from bench_from)."""
     todo = missing_days(start, end)
     have = list(EQ_DIR.glob("*.csv.gz")) if EQ_DIR.exists() else []
     day_mb = (sum(f.stat().st_size for f in have) / len(have) / 1e6) if len(have) >= 20 else DEFAULT_DAY_MB
@@ -250,7 +342,17 @@ def data_plan(start, end):
         "chunks": chunks,
         "how": "download one chunk per command: scan.py update --from <chunk from> --to <chunk to>. "
                "Safe to stop: finished days are kept and the next run continues.",
+        **_bench_plan(benchmark, bench_from or start, end),
     }
+
+
+def _bench_plan(benchmark, start, end):
+    gaps = benchmark_gaps(benchmark, start, end)
+    return {"benchmark": benchmark, "benchmark_days_missing": len(gaps),
+            "benchmark_download_needed": len(gaps) > 40,
+            "benchmark_est_minutes": max(1, math.ceil(len(gaps) * INDEX_SECONDS_PER_DAY / 60)) if gaps else 0,
+            "benchmark_how": "after the data chunks: scan.py update-indices --from <backtest from> --to <to> "
+                             "(small NSE index files, about 10 KB a day)" if gaps else None}
 
 
 # ---------------------------------------------------------------- panel (adjusted series)
@@ -795,6 +897,9 @@ def main():
     u = sub.add_parser("update", help="download missing NSE days")
     u.add_argument("--from", dest="start", help="YYYY-MM-DD (default: ~15 months ago)")
     u.add_argument("--to", dest="end", help="YYYY-MM-DD (default: today)")
+    ui = sub.add_parser("update-indices", help="read benchmark index closes for cached days that don't have them yet")
+    ui.add_argument("--from", dest="start", default="2014-01-01")
+    ui.add_argument("--to", dest="end")
     s = sub.add_parser("scan", help="signals + position updates as JSON")
     s.add_argument("--strategy", help="strategy id or .json path (default: the active strategy)")
     s.add_argument("--equity", type=float, help="current bot equity in ₹ (for position sizing)")
@@ -808,7 +913,10 @@ def main():
     b.add_argument("--from", dest="start", default="2016-01-01")
     b.add_argument("--to", dest="end")
     b.add_argument("--capital", type=float, help="starting capital in ₹ (default: the bot's capital in config.json)")
-    b.add_argument("--split", default="2021-01-01", help="out-of-sample starts on this date")
+    b.add_argument("--split", help="compare before/after this date (default: the middle of the period)")
+    b.add_argument("--benchmark", help="compare with this index instead of the strategy's own: "
+                                       "nifty50/nifty100/nifty200/nifty500/midcap150/smallcap250, or none")
+    b.add_argument("--risk-free", type=float, help="yearly risk-free rate %% for Sharpe/Sortino/alpha (default 6)")
     b.add_argument("--out", help="folder for trades.csv / equity.csv / summary.json")
     b.add_argument("--set", action="append", default=[], metavar="KEY=VALUE",
                    help="override one setting for this run, e.g. params.rsi_max=75 or risk.sizing.pct=1 "
@@ -822,9 +930,13 @@ def main():
     dp.add_argument("--strategy", help="strategy id or folder (sets the warm-up; default: the active strategy)")
     dp.add_argument("--from", dest="start", default="2016-01-01")
     dp.add_argument("--to", dest="end")
+    dp.add_argument("--benchmark", help="the index the backtest will compare with (default: the strategy's own)")
     a = ap.parse_args()
     if a.cmd == "update":
         update(dt.date.fromisoformat(a.start) if a.start else None, dt.date.fromisoformat(a.end) if a.end else None)
+    elif a.cmd == "update-indices":
+        n = update_indices(dt.date.fromisoformat(a.start), dt.date.fromisoformat(a.end) if a.end else dt.date.today())
+        print(json.dumps({"ok": True, "index_files_read": n}))
     elif a.cmd == "scan":
         try:
             cmd_scan(a)
@@ -840,7 +952,7 @@ def main():
             sys.exit(f"strategy problem: {e}")
         start = dt.date.fromisoformat(a.start)
         end = dt.date.fromisoformat(a.end) if a.end else dt.date.today()
-        print(json.dumps(dict(data_plan(warmup_start(st, start), end), backtest_from=start.isoformat()), indent=1))
+        print(json.dumps(dict(data_plan(warmup_start(st, start), end, a.benchmark or st.benchmark, start), backtest_from=start.isoformat()), indent=1))
     elif a.cmd == "backtest":
         from backtest import run_backtest  # sibling file
         try:

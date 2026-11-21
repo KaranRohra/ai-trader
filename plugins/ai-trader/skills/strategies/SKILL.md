@@ -33,7 +33,7 @@ Order: pick → check → settings → risk questions → **"Any more rules?"** 
 ### Step 3 · Strategy settings (Keep / Change)
 `python3 STRAT questions --id <id>` → `step_settings.in_words` lists the stop-loss, target, trailing stop, sell rules and order rules in plain words. Ask in one pop-up: "Keep these settings" (first) / "Change something". If they change something:
 - Ask which item, then offer 2–3 common values plus their own.
-- Save it with `python3 STRAT answer --id <id> --field <field> --value '<json>'`. Fields: `params.<name>` (e.g. `params.stop_pct` = 12), `stop`, `target`, `trail`, `max_hold_days`, `execution.limit_buffer_pct`, `execution.max_gap_pct`. `STRAT vocabulary` shows the formats.
+- Save it with `python3 STRAT answer --id <id> --field <field> --value '<json>'`. Fields: `params.<name>` (e.g. `params.stop_pct` = 12), `stop`, `target`, `trail`, `max_hold_days`, `execution.limit_buffer_pct`, `execution.max_gap_pct`, `benchmark` (only if the user asks to compare backtests with another index, e.g. `"nifty50"` or `"none"`). `STRAT vocabulary` shows the formats.
 - A change to the buy/sell **logic** (not just a number) means editing the draft's `strategy.py` and updating `buy_rules`/`sell_rules` to match.
 - After any settings or logic change, run `STRAT check --id <id>` again (the review requires it).
 
@@ -97,6 +97,7 @@ If they choose to backtest, follow the `backtest` skill from its step 2 (period 
      Use the helpers (`from aitrader_ta import *`: `sma`, `ema`, `rsi`, `atr`, `highest_before`, `avg_before`, `crossed_above`, `gap_pct`, `is_green`, `count_true`, ...). Day *i* may only use day *i* and earlier. Put every number the user may tune in `params` and read it from `p`.
    - **`strategy.json`**:
      - id, name, version `v1.0`, `about`, universe, `history_sessions`, `params`, `tunable`;
+     - optional `benchmark`: only if the user names an index to compare with (nifty50/nifty100/nifty200/nifty500/midcap150/smallcap250, or `"none"`). Left out = the universe's own index. It only changes what backtests compare with, never the trades (it isn't part of the strategy's fingerprint, so a backtest done before changing it still counts on the review screen);
      - `buy_rules` / `sell_rules` (plain-words lines with `{param}` placeholders), `rank_say`, `max_rank` if "top N";
      - stop / target / trail / `max_hold_days`, execution;
      - `"risk": null, "risk_suggested": null`.

@@ -55,7 +55,7 @@ The bot won't place a trade until every rule is answered, checked and confirmed.
 /ai-trader:backtest
 ```
 Pick a strategy (yours, a ready-made one, or one you're still setting up), a period (up to 2014 → today) and a starting capital. The backtest replays it **exactly like the live bot trades it**: the same script and risk rules, signals at the close, LIMIT buys the next morning, stops and targets filled like Zerodha GTT orders, delivery costs included. Each run saves:
-- `report.html`: opens in your browser. It shows equity and drawdown vs NIFTY 500, year by year, month by month, before vs after 2021, why signals were skipped, the rules tested and every trade. Works offline.
+- `report.html`: opens in your browser, in tabs. **Overview**: equity and drawdown vs the strategy's benchmark (its own index, e.g. NIFTY 500 or NIFTY 50, or another index you name, or none), year by year, first half vs second half, month by month. **Performance metrics**: Sharpe, Sortino, Calmar, volatility, drawdown length and recovery, beta, alpha, up/down capture, profit factor, expectancy and more, each next to the benchmark. **Trade analysis**: trade returns distribution, winning and losing streaks, time patterns (day, month, holding period, year), how trades ended and why signals were skipped. **All trades**: every trade with filters. **Strategy & method**: the rules tested and how the test works. Works offline.
 - `summary.json`, `trades.csv` (opens in Excel / Sheets) and `equity.csv`.
 
 ![Backtest report](docs/backtest-report.jpg)

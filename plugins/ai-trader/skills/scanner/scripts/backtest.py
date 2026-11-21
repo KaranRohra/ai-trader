@@ -9,6 +9,7 @@
 - Stops and targets act like broker GTTs: if the day's low touches the stop, exit at the stop (or at the open
   if it gapped below). Trailing stops, exit rules and time exits update at each close and sell the next open.
 - The weekly loss limit and drawdown halt from the risk block are simulated (turn off with --no-limits).
+- Benchmark: the strategy's own index (strategy.json "benchmark" picks another, or "none"); --benchmark overrides.
 - Costs: Zerodha delivery (0 brokerage) ~0.12% per side for STT/stamp/exchange/GST + ₹16 DP charge per sell.
 """
 import csv
@@ -19,6 +20,7 @@ import math
 from collections import deque
 
 import engine
+import metrics
 import report
 import scan
 from engine import Ctx, IndexData, ok
@@ -93,7 +95,7 @@ def _weeks(dates, equity):
     return out
 
 
-def _stats(dates, equity, trades, bench=None):
+def _stats(dates, equity, trades, bench=None, rf=metrics.RISK_FREE_PCT):
     if len(equity) < 2:
         return {}
     yrs = (dates[-1] - dates[0]).days / 365.25
@@ -131,14 +133,23 @@ def _stats(dates, equity, trades, bench=None):
         "avg_hold_days": round(sum(t["hold_days"] for t in trades) / len(trades), 1) if trades else None,
         "exit_reasons": {r: sum(1 for t in trades if t["exit_reason"] == r) for r in sorted({t["exit_reason"] for t in trades})},
     }
-    if bench and bench[0] and bench[-1]:
-        bpeak, bdd = bench[0], 0.0
-        for b in bench:
-            if b:
-                bpeak = max(bpeak, b)
-                bdd = min(bdd, b / bpeak - 1)
-        out["nifty500_cagr_pct"] = round(((bench[-1] / bench[0]) ** (1 / yrs) - 1) * 100, 2) if yrs > 0 else None
-        out["nifty500_max_drawdown_pct"] = round(bdd * 100, 2)
+    bpts = [(d, b) for d, b in zip(dates, bench or []) if b]
+    if len(bpts) > 1:  # the benchmark over the days it has values (an index can start later than the test)
+        bpeak, bdd = bpts[0][1], 0.0
+        for _, b in bpts:
+            bpeak = max(bpeak, b)
+            bdd = min(bdd, b / bpeak - 1)
+        byrs = (bpts[-1][0] - bpts[0][0]).days / 365.25
+        out["benchmark_cagr_pct"] = round(((bpts[-1][1] / bpts[0][1]) ** (1 / byrs) - 1) * 100, 2) if byrs > 0 else None
+        out["benchmark_max_drawdown_pct"] = round(bdd * 100, 2)
+    pf = metrics.perf(dates, equity, rf)
+    out.update({k: pf.get(k) for k in ("volatility_pct", "sharpe", "sortino", "calmar")})
+    if trades:
+        out["profit_factor"] = metrics.trade_stats(trades)["profit_factor"]
+    if len(bpts) > 2:
+        bp = metrics.perf(dates, bench, rf)
+        out["benchmark_sharpe"] = bp.get("sharpe")
+        out["benchmark_sortino"] = bp.get("sortino")
     return out
 
 
@@ -217,6 +228,7 @@ def simulate(panel, st, prepared, index, k0, k1, capital, universes, use_limits=
         nonlocal cash
         value = p["qty"] * px
         cost = value * COST_SIDE + DP_CHARGE
+        buy_cost = p["cost_basis"] - p["qty"] * p["entry"]
         cash += value - cost
         pnl = value - cost - p["cost_basis"]
         trades.append({
@@ -226,7 +238,7 @@ def simulate(panel, st, prepared, index, k0, k1, capital, universes, use_limits=
             "r": round((px - p["entry"]) / p["risk_ps"], 2) if p["risk_ps"] and p["risk_ps"] > 0 else None,
             "hold_days": k - p["k"], "exit_reason": why,
             "stop_pct": round(p["risk_ps"] / p["entry"] * 100, 2) if p["risk_ps"] else None,
-            "entry_rank": p["rank"], "entry_score": p["score"],
+            "entry_rank": p["rank"], "entry_score": p["score"], "charges": round(buy_cost + cost, 2),
         })
 
     for k in range(k0, k1 + 1):
@@ -469,16 +481,42 @@ def _prepare(panel, st, index, k0, k1, universes):
     return results, scores
 
 
-def _report(st, dates, eq, bench, trades, extra, split, use_limits):
+def _midpoint(dates):
+    """The calendar middle of the tested period: the report compares the first half with the second half."""
+    return dates[0] + (dates[-1] - dates[0]) / 2
+
+
+def _benchmark_info(bid, dates, bench):
+    first = next((d for d, b in zip(dates, bench) if b), None)
+    return {"id": bid, "name": engine.INDEX_LABELS.get(bid, "none") if bid != "none" else None,
+            "from": first.isoformat() if first else None,
+            "partial": bool(first and first > dates[0]), "missing": bid != "none" and first is None}
+
+
+def _report(st, dates, eq, bench, trades, extra, split, use_limits, rf=metrics.RISK_FREE_PCT, bid="nifty500"):
     summary = {"strategy": st.id, "strategy_name": st.name, "strategy_version": st.version,
+               "benchmark": _benchmark_info(bid, dates, bench),
                "risk_used": st.risk_source, "limits_simulated": use_limits,
                "costs": f"{COST_SIDE * 100:.2f}%/side + ₹{DP_CHARGE:.0f}/sell",
                "universe": f"{st.universe}: monthly proxy by 6-month traded value (point-in-time, incl. delisted)",
-               "full": dict(_stats(dates, eq, trades, bench), **extra)}
-    if split and dates[0] < split < dates[-1]:
+               "risk_free_pct": rf,
+               "full": dict(_stats(dates, eq, trades, bench, rf), **extra)}
+    years = summary["full"].get("years")
+    summary["full"]["performance"] = {
+        "risk_free_pct": rf,
+        "strategy": metrics.perf(dates, eq, rf),
+        "benchmark": metrics.perf(dates, bench, rf),
+        "vs_benchmark": metrics.relative(dates, eq, bench, rf),
+    }
+    summary["full"]["trade_stats"] = metrics.trade_stats(trades, years)
+    summary["analysis"] = metrics.analysis(dates, eq, trades)
+    split = split or _midpoint(dates)
+    if dates[0] < split < dates[-1]:
         j = next(n for n, d in enumerate(dates) if d >= split)
-        summary["in_sample"] = _stats(dates[:j + 1], eq[:j + 1], [t for t in trades if t["entry_date"] < split.isoformat()], bench[:j + 1])
-        summary["out_of_sample"] = _stats(dates[j:], eq[j:], [t for t in trades if t["entry_date"] >= split.isoformat()], bench[j:])
+        summary["split_date"] = split.isoformat()
+        # first half / second half of the period (keys kept as in_sample / out_of_sample for the strategy-lab)
+        summary["in_sample"] = _stats(dates[:j + 1], eq[:j + 1], [t for t in trades if t["entry_date"] < split.isoformat()], bench[:j + 1], rf)
+        summary["out_of_sample"] = _stats(dates[j:], eq[j:], [t for t in trades if t["entry_date"] >= split.isoformat()], bench[j:], rf)
     by_year = {}
     for y in sorted({d.year for d in dates}):
         idx = [n for n, d in enumerate(dates) if d.year == y]
@@ -486,7 +524,7 @@ def _report(st, dates, eq, bench, trades, extra, split, use_limits):
         base = eq[a - 1] if a > 0 else eq[a]
         bbase = bench[a - 1] if a > 0 else bench[a]
         by_year[y] = {"return_pct": round((eq[b] / base - 1) * 100, 1),
-                      "nifty500_pct": round((bench[b] / bbase - 1) * 100, 1) if bench[b] and bbase else None}
+                      "benchmark_pct": round((bench[b] / bbase - 1) * 100, 1) if bench[b] and bbase else None}
     summary["by_year"] = by_year
     summary["risk_suggestions"] = suggest_risk(dates, eq, summary["full"])
     return summary
@@ -517,13 +555,34 @@ def summary_card(summary, report_path=None):
             f"{f['trades']} trades · {pc(f['win_rate_pct'], False)} won · avg hold {f['avg_hold_days'] or '–'} days",
             f"Worst week {pc(f['worst_week_pct'])} (ending {f['worst_week_ending']}) · worst month {pc(f['worst_month_pct'])} ({f['worst_month']})",
         ]),
-        ("NIFTY 500, SAME PERIOD", [
-            f"CAGR {pc(f.get('nifty500_cagr_pct'), False)} · max drawdown {pc(f.get('nifty500_max_drawdown_pct'), False)}"]),
     ]
+    bm = summary.get("benchmark") or {}
+    bname = bm.get("name")
+    if bname:
+        since = f" (its data starts {bm['from']})" if bm.get("partial") else ""
+        sections.append((f"{bname.upper()}, SAME PERIOD{since.upper()}", [
+            f"CAGR {pc(f.get('benchmark_cagr_pct'), False)} · max drawdown {pc(f.get('benchmark_max_drawdown_pct'), False)}"]))
+    perf = f.get("performance") or {}
+    ps, pn, ts = perf.get("strategy") or {}, perf.get("benchmark") or {}, f.get("trade_stats") or {}
+    vs = f" / {bname}" if bname else ""
+    if ps:
+        def n(v):
+            return "–" if v is None else f"{v:.2f}"
+        def two(a, b, fmt=n):
+            return fmt(a) + (f" / {fmt(b)}" if bname else "")
+        sections.insert(1, (f"RISK-ADJUSTED (strategy{vs.upper()})", [
+            f"Sharpe {two(ps.get('sharpe'), pn.get('sharpe'))} · Sortino {two(ps.get('sortino'), pn.get('sortino'))}"
+            f" · Calmar {two(ps.get('calmar'), pn.get('calmar'))}",
+            f"Volatility {two(ps.get('volatility_pct'), pn.get('volatility_pct'), lambda v: pc(v, False))} a year"
+            f" · risk-free rate {perf.get('risk_free_pct')}%",
+            f"Profit factor {n(ts.get('profit_factor'))} · expectancy {rp(ts['expectancy']) if ts.get('expectancy') is not None else '–'}"
+            f" a trade · longest losing streak {((summary.get('analysis') or {}).get('streaks') or {}).get('trades', {}).get('loss', {}).get('max', '–')} trades",
+        ]))
     if summary.get("by_year"):
         yrs = summary["by_year"]
-        sections.append(("YEAR BY YEAR (strategy / NIFTY 500)", [
-            " · ".join(f"{y}: {pc(v['return_pct'])} / {pc(v['nifty500_pct'])}" for y, v in list(yrs.items())[i:i + 3])
+        sections.append((f"YEAR BY YEAR (strategy{vs.upper()})", [
+            " · ".join(f"{y}: {pc(v['return_pct'])}" + (f" / {pc(v.get('benchmark_pct'))}" if bname else "")
+                       for y, v in list(yrs.items())[i:i + 3])
             for i in range(0, len(yrs), 3)]))
     rows = []
     try:
@@ -559,17 +618,25 @@ def run_backtest(args):
         raise engine.StrategyError(f"the earliest start date is {EARLIEST_FROM} (NSE's free archive + warm-up data)")
     if (end - start).days < 180:
         raise engine.StrategyError("pick a period of at least 6 months")
+    bid = getattr(args, "benchmark", None) or st.benchmark
+    if bid not in engine.UNIVERSES and bid != "none":
+        raise engine.StrategyError(f"benchmark must be one of {sorted(engine.UNIVERSES)} or none")
     warm = warmup_start(st, start)
     if not args.no_update:
         missing = scan.missing_days(warm, end)
-        if len(missing) > MAX_INLINE_DOWNLOAD:
-            plan = scan.data_plan(warm, end)
+        gaps = scan.benchmark_gaps(bid, start, end)
+        if len(missing) > MAX_INLINE_DOWNLOAD or len(gaps) > MAX_INLINE_DOWNLOAD:
+            plan = scan.data_plan(warm, end, bid, start)
             print(json.dumps({"ok": False, "problem": "data_missing",
-                              "message": f"{plan['est_trading_days']} trading days of NSE data need downloading first "
-                                         f"(~{plan['est_mb']} MB, about {plan['est_minutes']} min)",
+                              "message": "; ".join(x for x in [
+                                  f"{plan['est_trading_days']} trading days of NSE data need downloading first "
+                                  f"(~{plan['est_mb']} MB, about {plan['est_minutes']} min)" if plan["download_needed"] or len(missing) > MAX_INLINE_DOWNLOAD else "",
+                                  f"{plan['benchmark_days_missing']} days of {engine.INDEX_LABELS.get(bid, bid)} values need reading "
+                                  f"(small index files, about {plan['benchmark_est_minutes']} min)" if plan["benchmark_download_needed"] else ""] if x),
                               "data_plan": plan}, indent=1))
             raise SystemExit(2)
         update(warm, end)
+        scan.update_indices(start, end)
     log("backtest: pass 1 (liquid-stock candidates)...")
     cands = _candidates(warm, end)
     log(f"backtest: loading {len(cands)} candidate series...")
@@ -579,7 +646,8 @@ def run_backtest(args):
     k0 = next(k for k, d in enumerate(panel.dates) if d >= start)
     k1 = len(panel.dates) - 1
     use_limits = not args.no_limits
-    split = dt.date.fromisoformat(args.split) if args.split else None
+    split = dt.date.fromisoformat(args.split) if args.split else None   # None = the middle of the period
+    rf = args.risk_free if getattr(args, "risk_free", None) is not None else metrics.RISK_FREE_PCT
     universes = {}
 
     variants = [(None, st)]
@@ -593,7 +661,8 @@ def run_backtest(args):
             log(f"backtest: computing {vst.name} rules on {len(panel.series)} series...")
             prepared = {sk: _prepare(panel, vst, index, k0, k1, universes)}
         log(f"backtest: simulating {panel.dates[k0]} .. {panel.dates[k1]}" + (f" ({args.sweep.partition('=')[0]}={val})" if val else ""))
-        dates, eq, bench, trades, extra = simulate(panel, vst, prepared[sk], index, k0, k1, args.capital, universes, use_limits)
+        dates, eq, _, trades, extra = simulate(panel, vst, prepared[sk], index, k0, k1, args.capital, universes, use_limits)
+        bench = scan.benchmark_closes(bid, [d.strftime("%Y%m%d") for d in dates])
         results.append((val, vst, dates, eq, bench, trades, extra))
 
     stamp = f"{st.id}_{st.version}_{start}_{results[0][2][-1]}"
@@ -602,23 +671,25 @@ def run_backtest(args):
     if args.sweep:
         rows = []
         for val, vst, dates, eq, bench, trades, extra in results:
-            s = _report(vst, dates, eq, bench, trades, extra, split, use_limits)
+            s = _report(vst, dates, eq, bench, trades, extra, split, use_limits, rf, bid)
             f = s["full"]
             rows.append({args.sweep.partition("=")[0]: _parse_value(val), "cagr_pct": f["cagr_pct"],
                          "max_drawdown_pct": f["max_drawdown_pct"], "cagr_to_maxdd": f["cagr_to_maxdd"],
                          "worst_week_pct": f["worst_week_pct"], "trades": f["trades"], "win_rate_pct": f["win_rate_pct"],
+                         "sharpe": f.get("sharpe"), "sortino": f.get("sortino"), "profit_factor": f.get("profit_factor"),
                          "avg_capital_invested_pct": f["avg_capital_invested_pct"],
                          "is_cagr_to_maxdd": s.get("in_sample", {}).get("cagr_to_maxdd"),
                          "oos_cagr_to_maxdd": s.get("out_of_sample", {}).get("cagr_to_maxdd"),
                          "signals_skipped": f["signals_skipped"]})
         res = {"strategy": st.id, "sweep": args.sweep, "settings": args.set, "limits_simulated": use_limits,
-               "nifty500_cagr_pct": f.get("nifty500_cagr_pct"), "nifty500_max_drawdown_pct": f.get("nifty500_max_drawdown_pct"),
+               "benchmark": bid,
+               "benchmark_cagr_pct": f.get("benchmark_cagr_pct"), "benchmark_max_drawdown_pct": f.get("benchmark_max_drawdown_pct"),
                "results": rows, "output_folder": str(out)}
         (out / "sweep.json").write_text(json.dumps(res, indent=1, default=str))
         print(json.dumps(res, indent=1, default=str))
         return
     val, vst, dates, eq, bench, trades, extra = results[0]
-    summary = _report(vst, dates, eq, bench, trades, extra, split, use_limits)
+    summary = _report(vst, dates, eq, bench, trades, extra, split, use_limits, rf, bid)
     summary["settings_overridden"] = args.set
     summary["strategy_file"] = vst.data
     summary["risk_rules"] = vst.risk
@@ -632,7 +703,7 @@ def run_backtest(args):
             w.writerows(trades)
     with (out / "equity.csv").open("w", newline="") as fh:
         w = csv.writer(fh)
-        w.writerow(["date", "equity", "nifty500"])
+        w.writerow(["date", "equity", "benchmark"])
         w.writerows((d.isoformat(), round(e, 2), b) for d, e, b in zip(dates, eq, bench))
     summary["output_folder"] = str(out)
     rep = report.build(out)

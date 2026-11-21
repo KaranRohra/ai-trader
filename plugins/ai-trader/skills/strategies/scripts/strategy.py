@@ -442,7 +442,7 @@ def cmd_answer(a):
     else:
         new = json.loads(json.dumps(d))
         keys = f.split(".")
-        if keys[0] not in ("params", "stop", "target", "trail", "max_hold_days", "execution", "universe", "max_rank"):
+        if keys[0] not in ("params", "stop", "target", "trail", "max_hold_days", "execution", "universe", "max_rank", "benchmark"):
             fail(f"'{f}' can't be answered here (the buy/sell logic lives in {engine.SCRIPT_FILE})", field=f)
         node = new
         for k in keys[:-1]:
@@ -462,7 +462,7 @@ def cmd_answer(a):
         words = buys_words(d) + sells_words(d) if keys[0] == "params" else sells_words(d) + orders_words(d)
     _save_draft(d)
     out({"ok": True, "field": f, "saved_to_draft": value, "in_words": words, "still_to_answer": _missing(d),
-         "note": "settings changed: run check again before the review" if f not in engine.RISK_FIELDS else None})
+         "note": "settings changed: run check again before the review" if f not in engine.RISK_FIELDS and f != "benchmark" else None})
 
 
 def _box(title, sections, footer):
@@ -511,7 +511,10 @@ def cmd_review(a):
             f"{_rupees(f['start_equity'])} → {_rupees(f['end_equity'])} ({f['total_return_pct']:+}%)",
             f"CAGR {f['cagr_pct']:.1f}% · max drawdown {f['max_drawdown_pct']:.1f}% · {f['trades']} trades · win rate {f['win_rate_pct'] or 0:.1f}%",
             f"Worst week {f['worst_week_pct']:.1f}% · worst month {f['worst_month_pct']:.1f}% ({f['worst_month']})",
-            f"NIFTY 500 same period: CAGR {f.get('nifty500_cagr_pct') or 0:.1f}% · max drawdown {f.get('nifty500_max_drawdown_pct') or 0:.1f}%",
+            *([f"{bt['benchmark']['name']} same period: CAGR {f.get('benchmark_cagr_pct') or 0:.1f}% · max drawdown {f.get('benchmark_max_drawdown_pct') or 0:.1f}%"]
+              if (bt.get("benchmark") or {}).get("name") else
+              [f"NIFTY 500 same period: CAGR {f['nifty500_cagr_pct']:.1f}% · max drawdown {f.get('nifty500_max_drawdown_pct') or 0:.1f}%"]
+              if f.get("nifty500_cagr_pct") is not None else []),
             "Costs included. A backtest is history, not a forecast."] + ([f"Full report: {bt['report']}"] if bt.get("report") else [])))
     title = f"Your strategy: {d['name']} ({d['version']})          Capital {_rupees(cap)} · {c.get('mode', 'PAPER')}"
     card = _box(title, sections, ["Start with these rules   ·   Change something   ·   Cancel"])
@@ -693,6 +696,8 @@ def cmd_vocabulary(a):
         "settings_file": {"required": ["id", "name", "version", "universe", "execution"],
                           "fields": {"universe": {"index": sorted(UNIVERSE_NAMES), "min_price": "₹ (optional)",
                                                   "min_turnover_cr": "20-day avg traded value, ₹ crore (optional)"},
+                                     "benchmark": "optional: the index backtests compare with, one of "
+                                                  f"{sorted(UNIVERSE_NAMES)} or \"none\" (default: the universe's own index)",
                                      "history_sessions": "days of history the rules need before the first signal (e.g. 260)",
                                      "params": "numbers the user may tune; the script reads them from p",
                                      "tunable": "{param: [low, high]} the strategy-lab may test",

@@ -39,6 +39,8 @@ UNIVERSES = {  # name -> (NSE constituents file, backtest proxy = ranks by 6-mon
     "midcap150": ("ind_niftymidcap150list.csv", (101, 250)),
     "smallcap250": ("ind_niftysmallcap250list.csv", (251, 500)),
 }
+INDEX_LABELS = {"nifty50": "NIFTY 50", "nifty100": "NIFTY 100", "nifty200": "NIFTY 200", "nifty500": "NIFTY 500",
+                "midcap150": "NIFTY Midcap 150", "smallcap250": "NIFTY Smallcap 250"}
 
 # The risk block: every key must be answered by the user before the bot trades the strategy.
 RISK_FIELDS = {
@@ -749,6 +751,10 @@ class Strategy:
         if u.get("index") not in UNIVERSES:
             raise StrategyError(f"universe.index must be one of {sorted(UNIVERSES)}")
         self.universe = u["index"]
+        # the index the backtest report compares with: the strategy's own index unless it names another (or "none")
+        self.benchmark = data.get("benchmark") or self.universe
+        if self.benchmark not in UNIVERSES and self.benchmark != "none":
+            raise StrategyError(f"benchmark must be one of {sorted(UNIVERSES)} or \"none\"")
         self.min_price, self.min_turnover_cr = u.get("min_price"), u.get("min_turnover_cr")
         self.max_rank = _num_or_param(data["max_rank"], self.params, "max_rank") if data.get("max_rank") is not None else None
         self.history = int(data.get("history_sessions") or 260)
@@ -1050,7 +1056,8 @@ def lookahead_check(st, panel, index, keys, max_stocks=40, cuts_per_stock=8):
 def fingerprint(data, script, rules_only=False):
     """Short hash of a strategy (settings + script). rules_only: everything except the risk answers."""
     import hashlib
-    body = {k: v for k, v in data.items() if not k.startswith("_") and not (rules_only and k == "risk")}
+    body = {k: v for k, v in data.items() if not k.startswith("_") and k != "benchmark"  # benchmark doesn't change trades
+            and not (rules_only and k == "risk")}
     return hashlib.sha256((json.dumps(body, sort_keys=True, default=str) + "\n" + script).encode()).hexdigest()[:16]
 
 
