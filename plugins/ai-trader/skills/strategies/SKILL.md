@@ -122,7 +122,7 @@ If they choose to backtest, follow the `backtest` skill from its step 2 (period 
 ## Changing things later
 - **"Change my risk" / "change the stop" / "add a rule"** etc.: `STRAT draft --id <active>` pre-fills the current answers. Ask only what they want to change (a new rule follows step 5), then the optional backtest (step 6), the review screen (step 7) and confirm. A changed strategy gets a new version (v1.0 → v1.1); the old one is archived for rollback.
 - **"Switch strategy":** step 1. If the other strategy is already set up and the user doesn't want changes, show `STRAT show --id <id>` and confirm with a pop-up before `STRAT activate --id <id>`.
-- Existing positions keep their GTT stops and targets. New rules apply to new entries, and exit rules apply from the next run.
+- Existing positions keep their broker stops and targets. New rules apply to new entries, and exit rules apply from the next run.
 - **"What am I running?":** `STRAT summary` (short) or `STRAT show --id <id>` (full).
 
 ## Ready-made strategies

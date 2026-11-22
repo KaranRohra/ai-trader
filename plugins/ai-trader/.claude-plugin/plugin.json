@@ -1,7 +1,7 @@
 {
   "name": "ai-trader",
-  "version": "3.0.0",
-  "description": "An AI trading system for Claude Code: describe any technical strategy in plain words (or pick a ready-made one), set the risk rules you choose, backtest it on 10+ years of NSE data with a full report, and let it trade with broker-side stop-losses, a journal, weekly review and self-improvement you approve. Zerodha (Kite MCP). Starts in PAPER mode.",
+  "version": "4.0.0",
+  "description": "An AI trading system for Claude Code: describe any technical strategy in plain words (or pick a ready-made one), set the risk rules you choose, backtest it on 10+ years of NSE data with a full report, and let it trade through your broker with broker-side stop-losses, a journal, weekly review and self-improvement you approve. Any broker: Zerodha ready-made; Dhan, FYERS, Groww and Upstox connected for you via their official MCPs; any other broker in Manual mode. Starts in PAPER mode.",
   "author": {
     "name": "Karan Rohra"
   },
@@ -15,7 +15,13 @@
     "nse",
     "trading-strategies",
     "momentum",
-    "nifty500"
+    "nifty500",
+    "dhan",
+    "fyers",
+    "groww",
+    "upstox",
+    "mcp",
+    "any-broker"
   ],
   "license": "MIT"
 }

@@ -27,6 +27,9 @@ CONFIG = HOME / "config.json"
 USER_STRATEGIES = HOME / "strategies"
 SKILLS = Path(__file__).resolve().parents[2]
 LIBRARY = SKILLS / "strategies" / "library"
+BROKER_LIBRARY = SKILLS / "brokers" / "library"   # ready-made broker profiles (Zerodha)
+USER_BROKERS = HOME / "brokers"                   # profiles the user connected (auto-connect / Manual)
+DEFAULT_BROKER = "zerodha"                        # configs from before Part 4 traded on Zerodha
 LEGACY_ID = "momentum-breakout"   # positions/journal rows from v1.0 have no strategy field
 NAN = float("nan")
 DEFAULT_PRIORITY = "sma(20, turnover_cr)"  # signal order when a strategy has no rank_by: most liquid first
@@ -52,7 +55,9 @@ RISK_FIELDS = {
     "halt_drawdown_pct": "no new entries while equity is this % below its highest level (null = no halt)",
     "regime": "market filter: a rule on the NIFTY 500 index, e.g. 'nifty500 > nifty500_sma(200)'; "
               "false that day -> no new entries (null = no market filter)",
-    "broker_stop_required": "true = every position must have a stop order (GTT) at the broker; if it can't be placed, the position is sold",
+    "broker_stop_required": "true = every position must have a stop order kept at the broker (a GTT / OCO); if it can't be "
+                            "placed, the position is sold. Brokers whose stop only lasts a day, or that have none, can't trade "
+                            "such a strategy LIVE",
     "stops_only_up": "true = a stop can be raised but never lowered",
 }
 
@@ -1147,6 +1152,52 @@ def config():
 def active_id():
     c = config()
     return (c or {}).get("active_strategy")
+
+
+# ---------------------------------------------------------------- the broker the bot trades through
+
+PROTECTION_WORDS = {  # protection level -> how the stop / target are kept
+    "two_leg": "one two-leg GTT / OCO order at the broker holds the stop and the target",
+    "single": "a GTT stop order waits at the broker; the target is checked by the bot at each run",
+    "day_sl": "a stop-loss order is placed at the broker on each run day (it lasts that day only)",
+    "bot_watch": "no order at the broker; the bot checks the stop and target at each run",
+}
+KEPT_AT_BROKER = ("two_leg", "single")  # protection that stays at the broker between runs
+
+
+def active_broker_id():
+    return (config() or {}).get("broker") or DEFAULT_BROKER
+
+
+def broker_profile(bid=None):
+    """The broker profile (the user's confirmed copy first, then the ready-made one), or None."""
+    bid = bid or active_broker_id()
+    for path in (USER_BROKERS / f"{bid}.json", BROKER_LIBRARY / f"{bid}.json"):
+        prof = read_json(path)
+        if prof:
+            prof["_path"] = str(path)
+            return prof
+    return None
+
+
+def broker_words(prof=None):
+    """The broker name, its protection level and whether orders are placed by hand (Manual), for summaries."""
+    prof = prof if prof is not None else broker_profile()
+    if not prof:
+        return {"name": "your broker", "protection": "bot_watch", "manual": False}
+    return {"name": prof.get("short_name") or prof.get("name"), "protection": prof.get("protection", "bot_watch"),
+            "manual": prof.get("execution") == "manual"}
+
+
+def broker_costs():
+    """(brokerage per order, DP charge per sell) of the active broker for backtests; None = the Zerodha defaults."""
+    prof = broker_profile()
+    if not prof or prof.get("id") == DEFAULT_BROKER:
+        return None
+    ch = prof.get("charges") or {}
+    if "brokerage_per_order" not in ch and "dp_per_sell" not in ch:
+        return None
+    return float(ch.get("brokerage_per_order") or 0), ch.get("dp_per_sell")
 
 
 def strategy_folder(ref):

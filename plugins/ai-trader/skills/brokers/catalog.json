@@ -1,0 +1,93 @@
+{
+ "_about": "Indian brokers with an official MCP server, from each broker's own docs (checked 2026-11-22). Tool names marked known_tools come from those docs; everything else is matched from the real tool list when the user connects. tested = run with real orders by the plugin author.",
+ "checked": "2026-11-22",
+ "brokers": [
+  {
+   "id": "zerodha",
+   "name": "Zerodha (Kite MCP)",
+   "short_name": "Zerodha",
+   "mcp_server": "kite",
+   "connect": {"transport": "http", "url": "https://mcp.kite.trade/mcp", "bundled": true},
+   "auth": "the login tool gives a link; one click per day",
+   "can_trade": true,
+   "protection_known": ["two_leg", "single", "day_sl"],
+   "known_tools": "all (ready-made profile)",
+   "prerequisites": [],
+   "notes": ["Ready-made: no setup needed."],
+   "docs": "https://github.com/zerodha/kite-mcp-server",
+   "tested": true
+  },
+  {
+   "id": "dhan",
+   "name": "Dhan (DhanHQ MCP)",
+   "short_name": "Dhan",
+   "mcp_server": "dhan",
+   "connect": {"transport": "http", "url": "https://mcp.dhan.co/mcp"},
+   "auth": "OAuth: /mcp → dhan → Authenticate, sign in in the browser",
+   "can_trade": true,
+   "protection_known": ["day_sl"],
+   "protection_to_check": "Super Orders (entry + target + stop in one order) and alerts with linked orders: check at connect whether a delivery (CNC) super order stays active across days; if yes it counts as two_leg",
+   "known_tools": {"funds": "portfolio_agent_tool", "holdings": "portfolio_agent_tool", "orders": "orderbook_agent_tool",
+                   "order_status": "orderbook_agent_tool", "place_order": "trading_agent_tool",
+                   "cancel_order": "trading_agent_tool", "quote": "market_data_agent_tool", "ltp": "market_data_agent_tool"},
+   "prerequisites": ["An active Dhan account with trading access",
+                     "Live quotes need Dhan's Data API plan (about ₹499/month); without it the bot uses the scan's prices"],
+   "notes": ["Dhan shows the full order and runs a margin check before each order."],
+   "docs": "https://docs.dhanhq.co/mcp/",
+   "tested": false
+  },
+  {
+   "id": "fyers",
+   "name": "FYERS (FYERS MCP)",
+   "short_name": "FYERS",
+   "mcp_server": "fyers",
+   "connect": {"transport": "sse", "url": "https://mcp.fyers.in/mcp"},
+   "auth": "FYERS sign-in. If Claude Code can't sign in, the docs' other route is an access token from the FYERS API dashboard sent as the Authorization header (needs a FYERS API app; the token lasts a day)",
+   "connect_alt": {"transport": "sse", "url": "https://mcp.fyers.in/mcp", "header": "Authorization: <app_id>:<access_token>"},
+   "can_trade": true,
+   "protection_known": ["two_leg", "single"],
+   "known_tools": {"protect_place": "create_gtt_order", "protect_modify": "modify_gtt_order",
+                   "protect_cancel": "cancel_gtt_order", "protect_list": "get_gtt_orders"},
+   "prerequisites": ["A FYERS account"],
+   "notes": ["create_gtt_order does single and OCO (two-leg) GTTs."],
+   "docs": "https://fyers.in/api-docs/ai/mcp/",
+   "tested": false
+  },
+  {
+   "id": "groww",
+   "name": "Groww (Groww MCP)",
+   "short_name": "Groww",
+   "mcp_server": "groww",
+   "connect": {"transport": "http", "url": "https://mcp.groww.in/mcp"},
+   "auth": "browser login when the server is first used",
+   "can_trade": true,
+   "protection_known": [],
+   "protection_to_check": "whether its tools offer a GTT / stop-loss order",
+   "known_tools": {},
+   "prerequisites": ["A Groww account", "DDPI authorisation, or the bot's sell orders won't go through"],
+   "notes": ["Groww calls its MCP early-stage."],
+   "docs": "https://groww.in/updates/groww-mcp",
+   "tested": false
+  },
+  {
+   "id": "upstox",
+   "name": "Upstox (Upstox MCP)",
+   "short_name": "Upstox",
+   "mcp_server": "upstox",
+   "connect": {"transport": "http", "url": "https://mcp.upstox.com/mcp"},
+   "auth": "OAuth: /mcp → upstox → Authenticate; once a day",
+   "can_trade": false,
+   "protection_known": [],
+   "known_tools": {},
+   "prerequisites": ["An Upstox account"],
+   "notes": ["The MCP is read-only: the bot reads holdings, cash and orders from it, and you place the orders it lists (Manual mode)."],
+   "docs": "https://upstox.com/developer/api-documentation/mcp-integration/",
+   "tested": false
+  }
+ ],
+ "manual": {
+  "id": "manual",
+  "name": "Any other broker (Manual mode)",
+  "notes": ["No MCP needed. The bot works out every order and stop; you place them in your broker's app and tell it the fill."]
+ }
+}

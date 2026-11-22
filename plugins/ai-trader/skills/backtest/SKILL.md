@@ -5,7 +5,7 @@ description: Backtest any AI Trader strategy (the active one, a ready-made one, 
 
 # Backtest
 
-Replays a strategy over past NSE data **exactly like the live bot trades it**: the same `strategy.py` logic, settings and risk rules, signals at the close, LIMIT buys the next morning, stops and targets like GTT orders, Zerodha delivery costs. The engine lives in the scanner skill.
+Replays a strategy over past NSE data **exactly like the live bot trades it**: the same `strategy.py` logic, settings and risk rules, signals at the close, LIMIT buys the next morning, stops and targets like orders waiting at the broker (GTT), delivery costs (the active broker's brokerage and DP charge; Zerodha's by default). The engine lives in the scanner skill.
 
 Scripts: `SCAN` = `<this skill's base directory>/../scanner/scripts/scan.py`, `STRAT` = `<base>/../strategies/scripts/strategy.py`. Both print JSON.
 

@@ -1,26 +1,26 @@
 #!/usr/bin/env python3
 """Bot bookkeeping (Python standard library only). The bot keeps its OWN books, separate from
-the rest of the Zerodha account, so equity/P&L only ever include trades the bot made.
+the rest of the broker account, so equity/P&L only ever include trades the bot made.
 
 Files in ~/ai-trader/
-  config.json               mode, capital, active strategy (optional "charges" overrides the rates below)
+  config.json               mode, capital, broker, active strategy (optional "charges" overrides the rates below)
   positions.json            open bot positions (what the scanner and order steps work from)
   journal/trades.csv        ONE ROW PER TRADE, written when the buy fills (status OPEN), updated every run,
                             finished at the exit (status CLOSED): why it was bought, the plan, the fill,
                             the risk, the broker stop, best/worst price while open, the exit, charges, result
-  journal/trade_events.csv  every event of every trade with date and time (orders, fills, GTTs, stop moves, exit)
+  journal/trade_events.csv  every event of every trade with date and time (orders, fills, broker stop orders, stop moves, exit)
   journal/decisions.csv     every signal decision: taken / vetoed / skipped_* / blocked_* with the signal's numbers
   journal/daily.csv         one row per run day: equity, cash, P&L for the day and week, drawdown, open risk, NIFTY 500
 
 Commands (all print JSON)
-  init --capital 100000 [--mode PAPER|LIVE]
+  init --capital 100000 [--mode PAPER|LIVE] [--broker zerodha]
   status [--prices '{"SYM": 123.4}']
   decision --symbol X --decision D --reason "..."            (the signal's numbers are filled in from the scan)
   open --symbol X --qty N --price P [--stop S] [--target T] [--strategy ID] [--gtt-id ID] [--order-id ID]
        [--time HH:MM:SS] [--day-open P] [--note "checks done"] [--scan FILE] [--rank R] [--score S] [--date D]
   event --symbol X --event E [--price P] [--qty N] [--order-id] [--gtt-id] [--old V] [--new V] [--note] [--time]
   stop --symbol X --stop S [--gtt-id ID] [--reason trail|breakeven|...] [--highest-close C]
-  close --symbol X --price P --reason R [--order-id ID] [--via gtt_stop|gtt_target|market_sell|paper]
+  close --symbol X --price P --reason R [--order-id ID] [--via gtt_stop|gtt_target|day_sl|market_sell|manual|paper]
         [--trigger-price P] [--time HH:MM:SS] [--note "..."] [--date D]
   snapshot [--prices '{...}'] [--scan FILE] [--date D]
   trade --symbol X | --id TRADE_ID                           one trade in full, with its events
@@ -48,8 +48,9 @@ EVENTS = J / "trade_events.csv"
 DECISIONS = J / "decisions.csv"
 DAILY = J / "daily.csv"
 
-# Estimated Zerodha equity-delivery charges (NSE). Rates change: check zerodha.com/charges and override any of
-# them in config.json -> "charges". Values are estimates; the contract note is the final word.
+# Estimated equity-delivery charges (NSE). The statutory ones (STT, exchange, SEBI, stamp, GST) are the same at
+# every broker; brokerage and the DP charge come from the broker profile (skills/brokers). Defaults = Zerodha.
+# Any of them can be overridden in config.json -> "charges". Estimates; the contract note is the final word.
 CHARGES_DEFAULT = {
     "brokerage_per_order": 0.0,   # delivery brokerage
     "stt_pct": 0.1,               # STT, buy and sell
@@ -61,7 +62,8 @@ CHARGES_DEFAULT = {
 }
 
 TRADE_GROUPS = {
-    "trade": ["trade_id", "status", "symbol", "sector", "strategy", "strategy_name", "strategy_version", "mode"],
+    "trade": ["trade_id", "status", "symbol", "sector", "strategy", "strategy_name", "strategy_version", "mode",
+              "broker"],
     "why_bought": ["signal_date", "signal_close", "signal_rank", "signal_score", "rules_passed", "rsi", "vol_ratio",
                    "breakout_pct", "ext_pct", "atr", "turnover_cr", "sma50", "sma200", "ret126_pct",
                    "market_filter", "nifty500_close", "entry_check_note"],
@@ -92,7 +94,8 @@ DAILY_COLS = ["date", "equity", "cash", "invested", "open_positions", "unrealize
               "day_pnl", "day_pnl_pct", "week_pnl", "week_pnl_pct", "peak_equity", "drawdown_pct", "open_risk",
               "charges_total", "trades_closed_total", "nifty500_close", "mode", "strategy", "version"]
 EVENT_NAMES = ["signal", "order_placed", "order_partial", "order_cancelled", "order_rejected", "entry_filled",
-               "gtt_placed", "gtt_modified", "gtt_deleted", "gtt_replaced", "gtt_triggered", "stop_moved",
+               "gtt_placed", "gtt_modified", "gtt_deleted", "gtt_replaced", "gtt_triggered",
+               "stop_order_placed", "stop_order_cancelled", "stop_order_triggered", "manual_instruction", "stop_moved",
                "exit_order_placed", "exit_filled", "closed", "error", "note"]
 
 DEFAULT_CONFIG = {
@@ -212,7 +215,9 @@ def week_start(d):
 
 def rates():
     c = engine.read_json(CONFIG, {}) if CONFIG.exists() else {}
-    return dict(CHARGES_DEFAULT, **(c.get("charges") or {}))
+    prof = engine.broker_profile((c or {}).get("broker")) or {}
+    broker = {k: v for k, v in (prof.get("charges") or {}).items() if k in CHARGES_DEFAULT and v is not None}
+    return dict(CHARGES_DEFAULT, **broker, **(c.get("charges") or {}))
 
 
 def leg_charges(side, value, rt=None):
@@ -381,9 +386,12 @@ def signal_fields(scan, sg):
             "planned_target": sg.get("target_est")}
 
 
-def _gtt_type(stop, target, gtt_id):
+def _gtt_type(stop, target, gtt_id, protection=None):
+    """What protects the position at the broker (column gtt_type; gtt_id = that order's id at the broker)."""
+    if protection == "day_sl" and stop:
+        return "day_sl"
     if not gtt_id:
-        return "none"
+        return "bot_watch" if protection == "bot_watch" and (stop or target) else "none"
     return "two_leg" if stop and target else ("stop_only" if stop else "target_only")
 
 
@@ -401,6 +409,7 @@ def build_entry(p, sig, equity_before, open_before, st, note="", entry_time="", 
         "trade_id": p["trade_id"], "status": "OPEN", "symbol": p["symbol"],
         "strategy": p.get("strategy") or engine.LEGACY_ID, "strategy_name": st.name if st else "",
         "strategy_version": p.get("version", ""), "mode": p.get("mode") or mode,
+        "broker": p.get("broker") or engine.DEFAULT_BROKER,
         "signal_rank": sig.get("signal_rank") if sig.get("signal_rank") is not None else p.get("rank"),
         "signal_score": sig.get("signal_score") if sig.get("signal_score") is not None else p.get("score"),
         "entry_check_note": note, "sizing_rule": _sizing_words(st),
@@ -418,7 +427,7 @@ def build_entry(p, sig, equity_before, open_before, st, note="", entry_time="", 
         "reward_risk": r2((target - price) / rps) if target and rps else None,
         "position_pct_of_equity": r2(value / equity_before * 100) if equity_before else None,
         "equity_at_entry": r2(equity_before), "open_positions_at_entry": open_before,
-        "gtt_id": p.get("gtt_id") or "", "gtt_type": _gtt_type(stop, target, p.get("gtt_id")),
+        "gtt_id": p.get("gtt_id") or "", "gtt_type": _gtt_type(stop, target, p.get("gtt_id"), p.get("protection")),
         "current_stop": stop, "stop_moves": 0, "last_stop_move_date": "",
         "last_price": price, "last_price_date": p["entry_date"], "unrealized_pnl": 0.0, "unrealized_pct": 0.0,
         "sessions_held": 0, "highest_close": p.get("highest_close") or price,
@@ -528,9 +537,11 @@ def cmd_init(a):
         c = json.loads(CONFIG.read_text())
         out({"status": "already set up", "config": c})
         return
-    c = dict(DEFAULT_CONFIG, capital=a.capital, mode=a.mode.upper(), created=today())
+    if not engine.broker_profile(a.broker):
+        sys.exit(f"no broker profile '{a.broker}': connect it first with the brokers skill (broker.py draft)")
+    c = dict(DEFAULT_CONFIG, capital=a.capital, mode=a.mode.upper(), broker=a.broker, created=today())
     CONFIG.write_text(json.dumps(c, indent=1))
-    for d in ("journal", "learning/configs", "weekly", "runs", "strategies"):
+    for d in ("journal", "learning/configs", "weekly", "runs", "strategies", "brokers"):
         (HOME / d).mkdir(parents=True, exist_ok=True)
     if not POSITIONS.exists():
         save_positions([])
@@ -566,10 +577,21 @@ def cmd_status(a):
     halt = bool(halt_lim) and drawdown_pct <= -halt_lim
     no_strategy = st is None
     unconfirmed = st is not None and not st.risk_confirmed
+    # the broker: LIVE entries need a confirmed profile, and a strategy that requires a stop kept at the broker
+    # can't open positions on a broker whose stop only lasts a day (day_sl) or that has none (bot_watch)
+    bid = engine.active_broker_id()
+    prof = engine.broker_profile(bid)
+    live = c["mode"] == "LIVE"
+    broker_unconfirmed = live and not (prof and prof.get("confirmed"))
+    stop_unavailable = (live and bool(prof) and bool(risk.get("broker_stop_required"))
+                        and prof.get("protection") not in engine.KEPT_AT_BROKER)
     reasons = [r for r, f in (("no_active_strategy", no_strategy), ("risk_not_confirmed", unconfirmed),
+                              ("broker_not_confirmed", broker_unconfirmed), ("broker_stop_unavailable", stop_unavailable),
                               ("weekly_loss_limit", weekly_block), ("drawdown_halt", halt)) if f]
     out({
         "mode": c["mode"], "capital": c["capital"],
+        "broker": {"id": bid, "name": (prof or {}).get("name"), "execution": (prof or {}).get("execution"),
+                   "protection": (prof or {}).get("protection")},
         "strategy": st.id if st else c.get("active_strategy"), "strategy_name": st.name if st else None,
         "version": st.version if st else None,
         "limits": {"weekly_loss_limit_pct": weekly_lim, "halt_drawdown_pct": halt_lim, "max_positions": max_pos},
@@ -622,7 +644,8 @@ def cmd_open(a):
          "stop": a.stop, "initial_stop": a.stop, "target": a.target, "highest_close": a.price, "gtt_id": a.gtt_id,
          "order_ids": [x for x in [a.order_id] if x], "rank": a.rank if a.rank is not None else sig.get("signal_rank"),
          "score": a.score if a.score is not None else sig.get("signal_score"), "mode": c["mode"], "version": st.version,
-         "trade_id": new_trade_id(a.symbol, ed)}
+         "trade_id": new_trade_id(a.symbol, ed), "broker": engine.active_broker_id(),
+         "protection": (engine.broker_profile() or {}).get("protection")}
     row, ch = build_entry(p, sig, equity_before, len(pos), st, note=a.note or "", entry_time=t,
                           day_open=a.day_open, mode=c["mode"])
     p["cost_basis"] = row["entry_cost"]
@@ -645,7 +668,8 @@ def cmd_open(a):
     log_event(a.symbol, "entry_filled", p["trade_id"], date=ed, time=t, price=a.price, qty=a.qty,
               order_id=a.order_id, note=f"limit {sig.get('limit_price')}" if sig.get("limit_price") else None)
     if a.gtt_id:
-        log_event(a.symbol, "gtt_placed", p["trade_id"], date=ed, time=t, gtt_id=a.gtt_id,
+        log_event(a.symbol, "stop_order_placed" if row["gtt_type"] == "day_sl" else "gtt_placed", p["trade_id"],
+                  date=ed, time=t, gtt_id=a.gtt_id,
                   new_value=f"stop {a.stop} / target {a.target}", note=row["gtt_type"])
     append(DECISIONS, DEC_COLS, {
         "date": ed, "time": t[:5], "strategy": st.id, "symbol": a.symbol, "decision": "taken",
@@ -666,7 +690,7 @@ def cmd_event(a):
     tid = (p or {}).get("trade_id", "")
     log_event(a.symbol, a.event, tid, date=a.date, time=a.time, price=a.price, qty=a.qty, order_id=a.order_id,
               gtt_id=a.gtt_id, old_value=a.old, new_value=a.new, note=a.note)
-    if p and a.gtt_id and a.event in ("gtt_placed", "gtt_replaced"):
+    if p and a.gtt_id and a.event in ("gtt_placed", "gtt_replaced", "stop_order_placed"):
         pos = positions()
         for x in pos:
             if x["symbol"] == a.symbol:
@@ -790,8 +814,8 @@ def cmd_close(a):
     save_positions([x for x in pos if x["symbol"] != a.symbol])
     _, _, eq_after, _ = equity_now({})
     row = update_trade(tid, {"equity_after": r2(eq_after)})
-    if a.trigger_price and via.startswith("gtt"):
-        log_event(a.symbol, "gtt_triggered", tid, date=exit_date, time=t_exit, price=a.trigger_price,
+    if a.trigger_price and (via.startswith("gtt") or via == "day_sl"):
+        log_event(a.symbol, "stop_order_triggered" if via == "day_sl" else "gtt_triggered", tid, date=exit_date, time=t_exit, price=a.trigger_price,
                   gtt_id=p.get("gtt_id"))
     log_event(a.symbol, "exit_filled", tid, date=exit_date, time=t_exit, price=a.price, qty=qty,
               order_id=a.order_id, note=a.reason)
@@ -964,6 +988,7 @@ def main():
     p = sub.add_parser("init")
     p.add_argument("--capital", type=float, default=100000)
     p.add_argument("--mode", default="PAPER", choices=["PAPER", "LIVE", "paper", "live"])
+    p.add_argument("--broker", default=engine.DEFAULT_BROKER, help="a ready-made or connected broker profile id")
     p.add_argument("--force", action="store_true")
     p = sub.add_parser("status")
     p.add_argument("--prices")
@@ -1016,8 +1041,10 @@ def main():
     p.add_argument("--price", type=float, required=True, help="average exit fill price")
     p.add_argument("--reason", required=True)
     p.add_argument("--order-id")
-    p.add_argument("--via", choices=["gtt_stop", "gtt_target", "market_sell", "paper"])
-    p.add_argument("--trigger-price", type=float, help="the GTT trigger or the price the exit was planned at")
+    p.add_argument("--via", choices=["gtt_stop", "gtt_target", "day_sl", "market_sell", "manual", "paper"],
+                   help="gtt_stop / gtt_target: the broker's GTT/OCO fired; day_sl: the day stop-loss order filled; "
+                        "market_sell: the bot sold; manual: you sold in the broker's app (Manual mode); paper: simulated")
+    p.add_argument("--trigger-price", type=float, help="the stop/target trigger or the price the exit was planned at")
     p.add_argument("--time", help="exit fill time HH:MM:SS")
     p.add_argument("--note")
     p.add_argument("--date")

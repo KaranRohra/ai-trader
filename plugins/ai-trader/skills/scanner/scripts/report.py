@@ -605,7 +605,7 @@ footer{color:var(--mute);font-size:12px;margin-top:22px}
  <li>Free official NSE end-of-day data. Prices adjusted for splits and bonuses.</li>
  <li>Stocks: {{UNIVERSE}}. NSE doesn't publish past index lists as data, so each month the most traded stocks stand in for the index. Delisted stocks are included.</li>
  <li>Signals use the day's close; the LIMIT buy is placed the next morning, exactly like the live bot. Trades skip if the stock opens too far up.</li>
- <li>Stops and targets act like Zerodha GTT orders: they fill at the level, or at the open if the price gapped past it.</li>
+ <li>Stops and targets act like stop / target orders waiting at the broker (GTT): they fill at the level, or at the open if the price gapped past it.</li>
  <li>Costs included: {{COSTS}}. Weekly loss limit and drawdown halt: {{LIMITS}}.</li>
  <li>Sharpe, Sortino and alpha use a {{RF}}% yearly risk-free rate and daily values (252 trading days a year).</li>
 </ul>

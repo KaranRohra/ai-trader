@@ -10,7 +10,8 @@
   if it gapped below). Trailing stops, exit rules and time exits update at each close and sell the next open.
 - The weekly loss limit and drawdown halt from the risk block are simulated (turn off with --no-limits).
 - Benchmark: the strategy's own index (strategy.json "benchmark" picks another, or "none"); --benchmark overrides.
-- Costs: Zerodha delivery (0 brokerage) ~0.12% per side for STT/stamp/exchange/GST + ₹16 DP charge per sell.
+- Costs: delivery ~0.12% per side for STT/stamp/exchange/GST + ₹16 DP charge per sell and 0 brokerage (Zerodha);
+  another active broker's brokerage per order and DP charge come from its profile (skills/brokers).
 """
 import csv
 import datetime as dt
@@ -28,6 +29,8 @@ from scan import EQ_DIR, HOME, Panel, assign_ranks, log, update
 
 COST_SIDE = 0.0012
 DP_CHARGE = 16.0
+BROKERAGE = 0.0      # per order; set from the active broker's profile in run_backtest (Zerodha: 0)
+BROKER_NAME = "Zerodha"
 DELIST_DAYS = 20
 WEEKLY_LEVELS = [3, 4, 5, 6, 8, 10, 12, 15, 20]
 EARLIEST_FROM = dt.date(2014, 1, 1)  # NSE index closes start Mar 2012; +~400 days warm-up for 200-day averages
@@ -227,7 +230,7 @@ def simulate(panel, st, prepared, index, k0, k1, capital, universes, use_limits=
     def sell(key, p, px, k, why):
         nonlocal cash
         value = p["qty"] * px
-        cost = value * COST_SIDE + DP_CHARGE
+        cost = value * COST_SIDE + DP_CHARGE + BROKERAGE
         buy_cost = p["cost_basis"] - p["qty"] * p["entry"]
         cash += value - cost
         pnl = value - cost - p["cost_basis"]
@@ -268,11 +271,11 @@ def simulate(panel, st, prepared, index, k0, k1, capital, universes, use_limits=
             if fill is None:
                 skipped["unfilled"] += 1
                 continue
-            qty = min(e["qty"], int(cash / (fill * (1 + COST_SIDE))))
+            qty = min(e["qty"], int((cash - BROKERAGE) / (fill * (1 + COST_SIDE))))
             if qty < 1:
                 skipped["cash"] += 1
                 continue
-            cost = qty * fill * (1 + COST_SIDE)
+            cost = qty * fill * (1 + COST_SIDE) + BROKERAGE
             cash -= cost
             if st.stop is None:
                 stop_px = None
@@ -497,7 +500,8 @@ def _report(st, dates, eq, bench, trades, extra, split, use_limits, rf=metrics.R
     summary = {"strategy": st.id, "strategy_name": st.name, "strategy_version": st.version,
                "benchmark": _benchmark_info(bid, dates, bench),
                "risk_used": st.risk_source, "limits_simulated": use_limits,
-               "costs": f"{COST_SIDE * 100:.2f}%/side + ₹{DP_CHARGE:.0f}/sell",
+               "costs": f"{COST_SIDE * 100:.2f}%/side + ₹{DP_CHARGE:.0f}/sell"
+                        + (f" + ₹{BROKERAGE:g}/order brokerage" if BROKERAGE else "") + f" ({BROKER_NAME})",
                "universe": f"{st.universe}: monthly proxy by 6-month traded value (point-in-time, incl. delisted)",
                "risk_free_pct": rf,
                "full": dict(_stats(dates, eq, trades, bench, rf), **extra)}
@@ -593,7 +597,7 @@ def summary_card(summary, report_path=None):
         w = max(len(r[0]) for r in rows)
         src = report.RISK_SOURCE_WORDS.get(summary["risk_used"], summary["risk_used"])
         sections.append(("RISK RULES USED", [f"{a.ljust(w)}  {b}" for a, b, _ in rows] + [f"From: {src}"]))
-    footer = ["Costs included (Zerodha delivery). A backtest is history, not a forecast."]
+    footer = [f"Costs included ({BROKER_NAME} delivery). A backtest is history, not a forecast."]
     if report_path:
         footer.append(f"Full report: {report_path}")
     lines = [title, ""]
@@ -604,7 +608,19 @@ def summary_card(summary, report_path=None):
     return "\n".join(lines + footer)
 
 
+def use_broker_costs():
+    """The active broker's brokerage and DP charge (Zerodha's defaults when it's Zerodha or not set)."""
+    global BROKERAGE, DP_CHARGE, BROKER_NAME
+    BROKER_NAME = engine.broker_words()["name"]
+    costs = engine.broker_costs()
+    if costs:
+        BROKERAGE = costs[0]
+        if costs[1] is not None:
+            DP_CHARGE = float(costs[1])
+
+
 def run_backtest(args):
+    use_broker_costs()
     base = engine.load(args.strategy)
     st = _variant(base, args.set)
     if args.capital is None:

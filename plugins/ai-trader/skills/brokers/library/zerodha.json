@@ -1,0 +1,33 @@
+{
+ "id": "zerodha",
+ "name": "Zerodha (Kite MCP)",
+ "short_name": "Zerodha",
+ "mcp_server": "kite",
+ "connect": {"transport": "http", "url": "https://mcp.kite.trade/mcp", "bundled": true},
+ "login": {"tool": "login", "check_tool": "get_profile", "daily": true,
+           "how": "call login, show the link it returns as a clickable markdown link, wait for the user to say done, then get_profile"},
+ "execution": "mcp",
+ "tools": {
+  "profile": "get_profile",
+  "quote": "get_quotes",
+  "ltp": "get_ltp",
+  "funds": "get_margins",
+  "holdings": "get_holdings",
+  "orders": "get_orders",
+  "order_status": "get_order_history",
+  "place_order": "place_order",
+  "cancel_order": "cancel_order",
+  "protect_list": "get_gtts",
+  "protect_place": "place_gtt_order",
+  "protect_modify": "modify_gtt_order",
+  "protect_cancel": "delete_gtt_order"
+ },
+ "protection": "two_leg",
+ "protection_available": ["two_leg", "single", "day_sl"],
+ "protection_expires_days": 365,
+ "supports_tag": true,
+ "charges": {"brokerage_per_order": 0.0, "dp_per_sell": 15.34},
+ "notes_file": "zerodha.md",
+ "tested": true,
+ "confirmed": "built-in"
+}

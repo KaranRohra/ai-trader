@@ -159,8 +159,27 @@ def sells_words(d):
     if d.get("max_hold_days"):
         lines.append(f"Time exit after {d['max_hold_days']} sessions")
     if st or tg:
-        lines.append(("Stop and target are" if st and tg else "Stop is" if st else "Target is") + " placed at Zerodha as a GTT order")
+        lines.append(protection_line(bool(st), bool(tg)))
     return lines
+
+
+def protection_line(st, tg):
+    """How the stop / target are kept, for the active broker (from its profile)."""
+    b = engine.broker_words()
+    name, prot, manual = b["name"], b["protection"], b["manual"]
+    what = "Stop and target are" if st and tg else "Stop is" if st else "Target is"
+    by = "you place " if manual else ""
+    if prot == "bot_watch" or (prot == "day_sl" and not st):
+        return f"{what} checked by the bot at each run (no order waits at {name})"
+    if prot == "day_sl":
+        return (f"Stop: {by}a stop-loss order at {name} on each run day (it lasts that day only)"
+                + ("; the target is checked by the bot at each run" if tg else ""))
+    if prot == "single" and st and tg:
+        return f"Stop: {by}a GTT order kept at {name}; the target is checked by the bot at each run"
+    if manual:
+        kind = "one two-leg GTT / OCO" if st and tg and prot == "two_leg" else "a GTT order"
+        return f"{what} kept at {name} as {kind} that you place in its app"
+    return f"{what} placed at {name} as a GTT order"
 
 
 def orders_words(d):
@@ -204,7 +223,8 @@ def risk_words(r, capital):
         rows.append(("Market filter", "On" if v else "None", regime_words(v) if v else "buys in any market"))
     if "broker_stop_required" in r:
         rows.append(("Stop at broker", "Required" if r["broker_stop_required"] else "Not required",
-                     "every position gets a GTT stop at Zerodha" if r["broker_stop_required"] else "positions may run without a broker stop"))
+                     f"every position gets a stop order kept at {engine.broker_words()['name']} (GTT)"
+                     if r["broker_stop_required"] else "positions may run without a broker stop"))
     if "stops_only_up" in r:
         rows.append(("Stops only move up", "Yes" if r["stops_only_up"] else "No", ""))
     return rows
@@ -656,7 +676,7 @@ def cmd_vocabulary(a):
         "technical_only": "rules may use daily price, volume, indicators and the NIFTY 500 - no fundamentals (P/E, market cap, ...)",
         "not_supported_yet": ["fundamentals (P/E, market cap, EPS, ROE, debt, results, ...)", "intraday / minute prices",
                               "short selling, F&O, MIS/intraday orders", "selling part of a position or adding to one",
-                              "order types other than a LIMIT buy and GTT / MARKET sells", "news or sentiment data"],
+                              "order types other than a LIMIT buy, MARKET sells and the broker's stop orders (GTT / OCO / stop-loss)", "news or sentiment data"],
         "folder": f"~/ai-trader/strategies/drafts/<id>/ with {engine.SETTINGS_FILE} + {engine.SCRIPT_FILE}",
         "script_contract": {
             "signature": "def prepare(stock, market, p): ...  (called once per stock with its full daily history)",
