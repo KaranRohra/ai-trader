@@ -30,7 +30,7 @@ The setup asks which broker you use. You never search for an MCP or edit JSON: t
 | Broker | How | Orders | Stop-loss at the broker | Notes |
 |---|---|---|---|---|
 | **Zerodha** | Kite MCP, comes with the plugin | ✅ | two-leg GTT (stop + target) | ready-made, tested live; one login click a day |
-| **Dhan** | official MCP (`mcp.dhan.co`), comes with the plugin | ✅ | day stop-loss order | ready-made, not tested with real orders yet; live quotes need Dhan's Data API plan (without it the bot uses NSE closing prices); sells need DDPI |
+| **Dhan** | official MCP (`mcp.dhan.co`), comes with the plugin | ✅ | stop at Dhan (conditional trigger); the bot watches the target | ready-made; Dhan's MCP has no Forever Order (GTT) tool yet; live quotes need Dhan's Data API plan (without it the bot uses NSE closing prices); sells need DDPI |
 | **FYERS** | official MCP (`mcp.fyers.in`), comes with the plugin | ✅ | GTT / OCO | |
 | **Groww** | official MCP (`mcp.groww.in`), added as a claude.ai connector | ✅ | checked at connect | sells need DDPI |
 | **Upstox** | official MCP (`mcp.upstox.com`), added for you | read-only | you place it | Manual mode with live data from the MCP |

@@ -1184,9 +1184,10 @@ def broker_words(prof=None):
     """The broker name, its protection level and whether orders are placed by hand (Manual), for summaries."""
     prof = prof if prof is not None else broker_profile()
     if not prof:
-        return {"name": "your broker", "protection": "bot_watch", "manual": False}
+        return {"name": "your broker", "protection": "bot_watch", "manual": False, "order_name": "GTT order"}
     return {"name": prof.get("short_name") or prof.get("name"), "protection": prof.get("protection", "bot_watch"),
-            "manual": prof.get("execution") == "manual"}
+            "manual": prof.get("execution") == "manual",
+            "order_name": prof.get("protect_order_name") or "GTT order"}
 
 
 def broker_costs():

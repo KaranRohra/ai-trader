@@ -3,9 +3,17 @@
  "name": "Dhan (DhanHQ MCP)",
  "short_name": "Dhan",
  "mcp_server": "dhan",
- "connect": {"transport": "http", "url": "https://mcp.dhan.co/mcp", "bundled": true},
- "login": {"tool": null, "check_tool": "portfolio_agent_tool", "daily": null,
-           "how": "signed in through /mcp (plugin:ai-trader:dhan → Authenticate). Check with portfolio_agent_tool action funds; if it says unauthorized or the session expired, ask the user to Authenticate again in /mcp (or call the server's login tool and show its link)"},
+ "connect": {
+  "transport": "http",
+  "url": "https://mcp.dhan.co/mcp",
+  "bundled": true
+ },
+ "login": {
+  "tool": null,
+  "check_tool": "portfolio_agent_tool",
+  "daily": null,
+  "how": "signed in through /mcp (plugin:ai-trader:dhan → Authenticate). Check with portfolio_agent_tool action funds; if it says unauthorized or the session expired, ask the user to Authenticate again in /mcp (or call the server's login tool and show its link)"
+ },
  "execution": "mcp",
  "tools": {
   "profile": null,
@@ -17,19 +25,27 @@
   "order_status": "orderbook_agent_tool",
   "place_order": "trading_agent_tool",
   "cancel_order": "trading_agent_tool",
-  "protect_list": null,
-  "protect_place": null,
-  "protect_modify": null,
-  "protect_cancel": null
+  "protect_list": "alerts_agent_tool",
+  "protect_place": "alerts_agent_tool",
+  "protect_modify": "alerts_agent_tool",
+  "protect_cancel": "alerts_agent_tool"
  },
- "protection": "day_sl",
- "protection_available": ["day_sl"],
- "protection_untested": {"single": "alerts_agent_tool: a conditional trigger (PRICE_WITH_VALUE, LESS_THAN the stop) with a linked SELL CNC order stays active until its expDate. Not used until it has been tested with a real order."},
+ "protection": "single",
+ "protection_available": [
+  "single",
+  "day_sl"
+ ],
  "sl_order_args": "trading_agent_tool action place: transactionType SELL, exchangeSegment NSE_EQ, securityId, quantity, orderType STOP_LOSS, productType CNC, triggerPrice = stop, price = stop x 0.98 (tick-rounded down), validity DAY",
  "supports_tag": false,
- "charges": {"brokerage_per_order": 0.0, "dp_per_sell": 14.75},
+ "charges": {
+  "brokerage_per_order": 0.0,
+  "dp_per_sell": 14.75
+ },
  "notes_file": "dhan.md",
  "tested": false,
  "ready_made": true,
- "tool_list_checked": "2026-11-22"
+ "tool_list_checked": "2026-11-22",
+ "protection_expires_days": 365,
+ "protection_how": "a Dhan conditional trigger (alerts_agent_tool): price at or below the stop places a SELL CNC MARKET order; stays active until its expDate. Confirmed working by the plugin's author.",
+ "protect_order_name": "conditional trigger"
 }

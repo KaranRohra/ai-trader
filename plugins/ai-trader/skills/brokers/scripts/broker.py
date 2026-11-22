@@ -197,6 +197,8 @@ def check_profile(d):
 
 def protection_text(d):
     words = engine.PROTECTION_WORDS.get(d.get("protection"), "")
+    if d.get("protect_order_name"):
+        words = words.replace("a GTT stop order", "a " + d["protect_order_name"] + " (stop)")
     if d.get("execution") == "manual" and d.get("protection") != "bot_watch":
         words = "you place it in the broker's app: " + words
     return words

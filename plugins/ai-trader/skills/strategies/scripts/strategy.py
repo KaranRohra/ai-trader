@@ -166,7 +166,7 @@ def sells_words(d):
 def protection_line(st, tg):
     """How the stop / target are kept, for the active broker (from its profile)."""
     b = engine.broker_words()
-    name, prot, manual = b["name"], b["protection"], b["manual"]
+    name, prot, manual, oname = b["name"], b["protection"], b["manual"], b.get("order_name", "GTT order")
     what = "Stop and target are" if st and tg else "Stop is" if st else "Target is"
     by = "you place " if manual else ""
     if prot == "bot_watch" or (prot == "day_sl" and not st):
@@ -175,11 +175,11 @@ def protection_line(st, tg):
         return (f"Stop: {by}a stop-loss order at {name} on each run day (it lasts that day only)"
                 + ("; the target is checked by the bot at each run" if tg else ""))
     if prot == "single" and st and tg:
-        return f"Stop: {by}a GTT order kept at {name}; the target is checked by the bot at each run"
+        return f"Stop: {by}a {oname} kept at {name}; the target is checked by the bot at each run"
     if manual:
-        kind = "one two-leg GTT / OCO" if st and tg and prot == "two_leg" else "a GTT order"
+        kind = "one two-leg GTT / OCO" if st and tg and prot == "two_leg" else f"a {oname}"
         return f"{what} kept at {name} as {kind} that you place in its app"
-    return f"{what} placed at {name} as a GTT order"
+    return f"{what} placed at {name} as a {oname}"
 
 
 def orders_words(d):
