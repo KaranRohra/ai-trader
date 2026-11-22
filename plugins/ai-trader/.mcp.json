@@ -3,6 +3,14 @@
     "kite": {
       "type": "http",
       "url": "https://mcp.kite.trade/mcp"
+    },
+    "dhan": {
+      "type": "http",
+      "url": "https://mcp.dhan.co/mcp"
+    },
+    "fyers": {
+      "type": "sse",
+      "url": "https://mcp.fyers.in/mcp"
     }
   }
 }

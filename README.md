@@ -9,7 +9,7 @@ A Claude Code plugin that runs a trading system end to end through your broker:
 
 Once a day you type one command and log in to your broker. Every change the system wants to make to itself waits for your approval.
 
-**Today:** 2 ready-made strategies plus your own, on NSE stocks. **Any broker:** Zerodha is ready-made; Dhan, FYERS, Groww and Upstox are connected for you through their official MCPs; any other broker works in Manual mode.
+**Today:** 2 ready-made strategies plus your own, on NSE stocks. **Any broker:** Zerodha and Dhan are ready-made; FYERS, Groww and Upstox are connected for you through their official MCPs; any other broker works in Manual mode.
 
 > **Disclaimer.** This is an experiment shared for education. It is **not investment advice**, and I am not a SEBI-registered adviser. Trading involves risk, including the loss of your capital. Past or backtested results don't guarantee future results. You are responsible for every order placed in your account.
 
@@ -25,14 +25,14 @@ Once a day you type one command and log in to your broker. Every change the syst
 | Learning | Records every near-miss and its outcome. Suggests lessons and tweaks, which apply only if you approve |
 
 ## Brokers
-The setup asks which broker you use. You never search for an MCP or edit JSON: the bot adds the broker's official MCP for you, matches its tools, tests them read-only, asks your brokerage and DP charge, and shows a review screen.
+The setup asks which broker you use. You never search for an MCP or edit JSON: the Zerodha, Dhan and FYERS MCPs come with the plugin (you just sign in through `/mcp`), Groww is added once as a claude.ai connector, and for other brokers the bot adds the official MCP for you. Zerodha and Dhan have ready-made profiles; for the others the bot matches the MCP's tools. Then it tests them read-only, asks your brokerage and DP charge, and shows a review screen.
 
 | Broker | How | Orders | Stop-loss at the broker | Notes |
 |---|---|---|---|---|
 | **Zerodha** | Kite MCP, comes with the plugin | ✅ | two-leg GTT (stop + target) | ready-made, tested live; one login click a day |
-| **Dhan** | official MCP (`mcp.dhan.co`), added for you | ✅ | checked at connect | live quotes need Dhan's Data API plan; without it the bot uses NSE closing prices |
-| **FYERS** | official MCP (`mcp.fyers.in`), added for you | ✅ | GTT / OCO | |
-| **Groww** | official MCP (`mcp.groww.in`), added for you | ✅ | checked at connect | sells need DDPI |
+| **Dhan** | official MCP (`mcp.dhan.co`), comes with the plugin | ✅ | day stop-loss order | ready-made, not tested with real orders yet; live quotes need Dhan's Data API plan (without it the bot uses NSE closing prices); sells need DDPI |
+| **FYERS** | official MCP (`mcp.fyers.in`), comes with the plugin | ✅ | GTT / OCO | |
+| **Groww** | official MCP (`mcp.groww.in`), added as a claude.ai connector | ✅ | checked at connect | sells need DDPI |
 | **Upstox** | official MCP (`mcp.upstox.com`), added for you | read-only | you place it | Manual mode with live data from the MCP |
 | **Any other broker** | no MCP needed | you place them | you place it | Manual mode |
 

@@ -1,6 +1,6 @@
 ---
 name: brokers
-description: Connect, show or switch the AI Trader's broker - Zerodha is ready-made (Kite MCP bundled); Dhan, FYERS, Groww, Upstox or any broker with an official MCP are connected for the user (the MCP is added for them, its tools matched and tested read-only, charges asked, review, confirm); brokers without an MCP, or with a read-only one, use Manual mode (the bot lists the orders, the user places them). Use when the user wants another broker, asks which brokers work, or trading-setup reaches the broker step.
+description: Connect, show or switch the AI Trader's broker - Zerodha is ready-made (Kite MCP bundled, tested); Dhan is ready-made too (MCP bundled, the user signs in, read-only checks, confirm); FYERS's MCP is bundled; Groww is added as a claude.ai connector; Upstox or any other broker with an official MCP is added for the user; then its tools are matched and tested read-only, charges asked, review, confirm); brokers without an MCP, or with a read-only one, use Manual mode (the bot lists the orders, the user places them). Use when the user wants another broker, asks which brokers work, or trading-setup reaches the broker step.
 ---
 
 # Brokers
@@ -34,11 +34,15 @@ Run `BROKER catalog`. Ask: **Zerodha** (ready-made) · **Another broker with an 
 
 **Zerodha:** run `BROKER use --id zerodha`. That's all; the Kite MCP comes with the plugin.
 
+**Ready-made but untested (Dhan; `catalog` shows `ready_made: true`):** the profile and notes file are already written, so the flow is short. `BROKER draft --id dhan` (step 2) → sign in (step 3) → **check the tool list instead of matching**: load the server's tools (ToolSearch `+dhan`) and confirm that every tool named in the draft's `tools` exists and that its inputs still look like the notes file. If one is missing or changed, fall back to step 4 for that slot and fix the notes. Then step 5 (read-only checks), step 7 (show the pre-filled charges and ask "still right?"), and step 9. Skip steps 4, 6 and 8.
+
 ### 2. Draft
 Run `BROKER draft --id <id>`, or for Manual mode `BROKER draft --id <id> --manual --name "<Broker>"`. Running it again resumes the saved draft, so after a restart pick up where it stopped. It returns `errors` (what's still missing) and `notes_path` (where the exact tool use goes).
 
 ### 3. Add the MCP for the user (skip in Manual mode without an MCP)
-- Check whether it's already there:
+- **Groww (claude.ai connector):** Groww's sign-in refuses Claude Code's own callback ("Invalid redirect URL"), so `connect-cmd` returns connector steps instead of a command. Show them: claude.ai → Settings → Connectors → Add custom connector → `https://mcp.groww.in/mcp` → Connect, then restart Claude Code signed in with the same claude.ai account. Its tools then show up in Claude Code under the connector's name; set `mcp_server` to that name.
+- **Bundled (Dhan, FYERS):** the plugin already has the server, shown in `/mcp` as `plugin:ai-trader:<server>`. Nothing to add and no restart. If its tools aren't available yet (ToolSearch `+<server>` finds nothing), say: "Open `/mcp`, pick **plugin:ai-trader:<server>** and **Authenticate** (sign in to <Broker> in the browser). Then say *continue broker setup*." The user may also have the same broker as a claude.ai connector; use whichever one is signed in, and set `mcp_server` to that name.
+- Not bundled: check whether it's already there:
   - its tools are available in this session (named like `mcp__<server>__…`, or as a claude.ai connector — load them with ToolSearch `+<server>`), or
   - `claude mcp list` shows it.
 - If it isn't there: run `BROKER connect-cmd --id <id>` and show the user the command and the `prerequisites`. Ask "May I add the <Broker> MCP to your Claude Code?", then run the command with Bash.

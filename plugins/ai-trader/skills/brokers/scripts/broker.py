@@ -5,7 +5,7 @@ A broker profile says which MCP server to use, which of its tools does each job 
 holdings, buy, cancel, order status, stop order), how stops are kept (protection level), whether orders are
 placed by the MCP or by the user (Manual mode), and the broker's charges.
 
-  Ready-made:  skills/brokers/library/<id>.json (+ <id>.md: exact tool use)        - Zerodha
+  Ready-made:  skills/brokers/library/<id>.json (+ <id>.md: exact tool use)        - Zerodha (tested), Dhan
   Catalog:     skills/brokers/catalog.json - every Indian broker with an official MCP (URL, login, what it can do)
   Yours:       ~/ai-trader/brokers/<id>.json (+ <id>.md), drafts in ~/ai-trader/brokers/drafts/
   Active:      ~/ai-trader/config.json -> "broker" (missing = zerodha)
@@ -224,8 +224,12 @@ def cmd_catalog(a):
     cat = catalog()
     act = engine.active_broker_id() if engine.CONFIG.exists() else None
     out({"checked": cat.get("checked"), "active": act,
-         "brokers": [{k: b.get(k) for k in ("id", "name", "can_trade", "auth", "protection_known", "prerequisites",
-                                            "notes", "tested", "docs")} for b in cat["brokers"]],
+         "brokers": [dict({k: b.get(k) for k in ("id", "name", "can_trade", "auth", "protection_known",
+                                                 "prerequisites", "notes", "tested", "docs")},
+                          ready_made=(LIB / f"{b['id']}.json").exists(),
+                          bundled=bool((b.get("connect") or {}).get("bundled")),
+                          connector=(b.get("connect") or {}).get("connector"))
+                     for b in cat["brokers"]],
          "manual": cat.get("manual"),
          "other": "A broker that isn't listed but has an MCP: draft --id <name> --url <its MCP URL>"})
 
@@ -234,9 +238,25 @@ def cmd_connect_cmd(a):
     b = catalog_entry(a.id)
     if not b:
         fail(f"'{a.id}' isn't in the catalog. For another MCP: claude mcp add --transport http <name> <url> --scope user")
+    if (b.get("connect") or {}).get("connector"):
+        c = b["connect"]
+        out({"broker": a.id, "bundled": False, "command": None, "connector": True, "url": c["url"],
+             "say": f"{b['short_name']}'s sign-in doesn't accept Claude Code's own sign-in, so it's added as a "
+                    "claude.ai connector instead (once). It then shows up in Claude Code too.",
+             "after": ["On claude.ai: Settings → Connectors → Add custom connector, URL " + c["url"] +
+                       ", then Connect and sign in",
+                       "Restart Claude Code (signed in with the same claude.ai account)",
+                       "Then say 'continue broker setup'"],
+             "auth": b.get("auth"), "prerequisites": b.get("prerequisites")})
+        return
     if (b.get("connect") or {}).get("bundled"):
+        srv = b["mcp_server"]
         out({"broker": a.id, "bundled": True, "command": None,
-             "say": f"{b['short_name']}'s MCP comes with the plugin: nothing to add."})
+             "say": f"{b['short_name']}'s MCP comes with the plugin: nothing to add and no restart.",
+             "after": [f"Run /mcp, pick plugin:ai-trader:{srv} (or a {b['short_name']} claude.ai connector if you "
+                       "already have one) and Authenticate if it asks",
+                       "Then say 'continue broker setup'"] if a.id != "zerodha" else [],
+             "auth": b.get("auth"), "prerequisites": b.get("prerequisites")})
         return
     c = b.get("connect_alt") if a.alt and b.get("connect_alt") else b["connect"]
     cmd = f"claude mcp add --transport {c['transport']} --scope user {b['mcp_server']} {c['url']}"
@@ -255,7 +275,10 @@ def cmd_list(a):
     for root, kind in ((LIB, "ready-made"), (USER, "connected")):
         for p in sorted(root.glob("*.json")) if root.exists() else []:
             d = engine.read_json(p)
-            profiles.append({"id": d["id"], "name": d.get("name"), "kind": kind, "execution": d.get("execution"),
+            if kind == "ready-made" and (USER / p.name).exists():
+                continue  # the user's connected copy is listed instead
+            k = "ready-made (connect to use)" if kind == "ready-made" and not d.get("confirmed") else kind
+            profiles.append({"id": d["id"], "name": d.get("name"), "kind": k, "execution": d.get("execution"),
                              "protection": d.get("protection"), "tested": d.get("tested", False),
                              "confirmed": d.get("confirmed"), "active": d["id"] == act})
     drafts = sorted(p.stem for p in DRAFTS.glob("*.json")) if DRAFTS.exists() else []
@@ -273,6 +296,8 @@ def cmd_draft(a):
     cat = catalog_entry(a.id)
     if base:
         d = dict(base)
+        if cat and not base.get("tested"):
+            d["_catalog_hints"] = {k: cat.get(k) for k in ("prerequisites", "notes", "docs")}
         lib_notes = LIB / (base.get("notes_file") or f"{a.id}.md")
         if lib_notes.exists():
             DRAFTS.mkdir(parents=True, exist_ok=True)
@@ -302,9 +327,14 @@ def cmd_draft(a):
     d.pop("_path", None)
     save_draft(d)
     err, warn = check_profile(d)
-    out({"status": "draft started", "draft": d, "errors": err, "warnings": warn,
+    ready = bool(base)
+    out({"status": "draft started", "ready_made": ready, "draft": d, "errors": err, "warnings": warn,
          "notes_path": _notes_path(d, True),
-         "next": "connect the MCP if needed (connect-cmd), match its tools to the slots, run the read-only checks, "
+         "next": ("ready-made: have the user sign in (connect-cmd), check that every tool in the profile is in the "
+                  "server's tool list (if one is missing or its inputs differ from the notes, match the tools "
+                  "instead), run the read-only checks, confirm the pre-filled charges, then check -> review -> "
+                  "confirm") if ready else
+                 "connect the MCP if needed (connect-cmd), match its tools to the slots, run the read-only checks, "
                  "pick the protection level, ask the charges, then check -> review -> confirm"})
 
 
@@ -398,8 +428,9 @@ def cmd_confirm(a):
 
 def cmd_use(a):
     d = engine.broker_profile(a.id)
-    if not d:
-        fail(f"no confirmed profile '{a.id}'. Connect it first: broker.py draft --id {a.id}")
+    if not d or not d.get("confirmed"):
+        fail(f"no confirmed profile '{a.id}'. Connect it first: broker.py draft --id {a.id}"
+             + (" (ready-made: no tool matching needed)" if d else ""))
     c = config()
     if not c:
         fail("not set up yet: run the trading-setup skill")
